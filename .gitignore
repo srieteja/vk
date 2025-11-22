@@ -1,0 +1,17 @@
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+vendor/
+.idea/
+.vscode/
+*.swp
+.DS_Store
+.env
+.env.local
+coverage.out
+coverage.html
+dist/
+build/
