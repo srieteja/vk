@@ -4,9 +4,9 @@ services:
     image: postgres:15-alpine
     container_name: enterprise_db
     environment:
-      POSTGRES_USER: enterprise_user
-      POSTGRES_PASSWORD: enterprise_password
-      POSTGRES_DB: enterprise_db
+      POSTGRES_USER: srie
+      POSTGRES_PASSWORD: qwerty
+      POSTGRES_DB: vk_db
     ports:
       - "5432:5432"
     volumes:

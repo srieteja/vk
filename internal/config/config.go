@@ -21,7 +21,7 @@ func LoadConfig() *Config {
 	return &Config{
 		Port:               getEnv("PORT", "8080"),
 		Environment:        getEnv("ENVIRONMENT", "development"),
-		DatabaseURL:        getEnv("DATABASE_URL", "postgres://user:password@localhost:5432/db"),
+		DatabaseURL:        getEnv("DATABASE_URL", "postgres://srie:qwerty@localhost:5432/vk_db"),
 		MaxConnections:     getEnvInt("DB_MAX_CONNECTIONS", 25),
 		JWTSecret:          getEnv("JWT_SECRET", "secret"),
 		TokenExpiry:        time.Duration(getEnvInt("TOKEN_EXPIRY", 86400)) * time.Second,
