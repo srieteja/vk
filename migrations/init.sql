@@ -1,4 +1,4 @@
-CREATE TABLE IF NOT EXISTS users_a (
+CREATE TABLE IF NOT EXISTS advocates (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS users_a (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS users_b (
+CREATE TABLE IF NOT EXISTS clients (
     id SERIAL PRIMARY KEY,
     email VARCHAR(255) UNIQUE NOT NULL,
     password VARCHAR(255) NOT NULL,
@@ -43,13 +43,13 @@ CREATE TABLE IF NOT EXISTS calls (
 
 CREATE TABLE IF NOT EXISTS payments (
     id SERIAL PRIMARY KEY,
-    user_b_id INTEGER NOT NULL,
-    user_a_id INTEGER NOT NULL,
+    client_id INTEGER NOT NULL,
+    advocate_id INTEGER NOT NULL,
     amount DECIMAL(10, 2) NOT NULL,
     status VARCHAR(50) DEFAULT 'pending',
     transaction_id VARCHAR(255) UNIQUE NOT NULL,
     payment_gateway VARCHAR(50) NOT NULL,
-    user_a_commission DECIMAL(10, 2) DEFAULT 0.00,
+    advocate_commission DECIMAL(10, 2) DEFAULT 0.00,
     platform_fee DECIMAL(10, 2) DEFAULT 0.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -64,9 +64,9 @@ CREATE TABLE IF NOT EXISTS sessions (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_users_a_email ON users_a(email);
-CREATE INDEX idx_users_b_email ON users_b(email);
+CREATE INDEX idx_advocates_email ON advocates(email);
+CREATE INDEX idx_clients_email ON clients(email);
 CREATE INDEX idx_calls_caller ON calls(caller_id);
 CREATE INDEX idx_calls_receiver ON calls(receiver_id);
-CREATE INDEX idx_payments_user_b ON payments(user_b_id);
-CREATE INDEX idx_payments_user_a ON payments(user_a_id);
+CREATE INDEX idx_payments_client ON payments(client_id);
+CREATE INDEX idx_payments_advocate ON payments(advocate_id);

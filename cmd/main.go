@@ -44,16 +44,16 @@ func main() {
 		auth := api.Group("/auth")
 		{
 			auth.POST("/userA/register", func(c *gin.Context) {
-				c.JSON(200, gin.H{"message": "UserA register endpoint"})
+				c.JSON(200, gin.H{"message": "Advocate register endpoint"})
 			})
 			auth.POST("/userA/login", func(c *gin.Context) {
-				c.JSON(200, gin.H{"message": "UserA login endpoint"})
+				c.JSON(200, gin.H{"message": "Advocate login endpoint"})
 			})
 			auth.POST("/userB/register", func(c *gin.Context) {
-				c.JSON(200, gin.H{"message": "UserB register endpoint"})
+				c.JSON(200, gin.H{"message": "Client register endpoint"})
 			})
 			auth.POST("/userB/login", func(c *gin.Context) {
-				c.JSON(200, gin.H{"message": "UserB login endpoint"})
+				c.JSON(200, gin.H{"message": "Client login endpoint"})
 			})
 		}
 	}

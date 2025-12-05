@@ -14,14 +14,14 @@ func NewAuthService() *AuthService {
 	return &AuthService{}
 }
 
-func (s *AuthService) RegisterUserA(req *models.RegisterRequest) (*models.UserA, error) {
+func (s *AuthService) RegisterAdvocate(req *models.RegisterRequest) (*models.Advocate, error) {
 	if req.Email == "" || req.Password == "" {
 		return nil, errors.New("email and password required")
 	}
 
 	hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 
-	user := &models.UserA{
+	user := &models.Advocate{
 		Email:        req.Email,
 		Password:     string(hash),
 		Name:         req.Name,
@@ -30,9 +30,9 @@ func (s *AuthService) RegisterUserA(req *models.RegisterRequest) (*models.UserA,
 	return user, nil
 }
 
-func (s *AuthService) LoginUserA(email, password string) (*models.UserA, error) {
+func (s *AuthService) LoginAdvocate(email, password string) (*models.Advocate, error) {
 	if email == "" || password == "" {
 		return nil, errors.New("invalid credentials")
 	}
-	return &models.UserA{Email: email}, nil
+	return &models.Advocate{Email: email}, nil
 }

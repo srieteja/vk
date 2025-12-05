@@ -13,17 +13,17 @@ func NewPaymentService() *PaymentService {
 	return &PaymentService{}
 }
 
-func (s *PaymentService) InitiatePayment(userBID, userAID uint, amount float64) (*models.Payment, error) {
+func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float64) (*models.Payment, error) {
 	if amount <= 0 {
 		return nil, errors.New("invalid amount")
 	}
 
 	payment := &models.Payment{
-		UserBID:        userBID,
-		UserAID:        userAID,
+		ClientID:        clientID,
+		AdvocateID:        advocateID,
 		Amount:         amount,
 		Status:         "pending",
-		TransactionID:  fmt.Sprintf("txn_%d", userBID),
+		TransactionID:  fmt.Sprintf("txn_%d", clientID),
 		PaymentGateway: "stripe",
 	}
 	return payment, nil
@@ -31,7 +31,7 @@ func (s *PaymentService) InitiatePayment(userBID, userAID uint, amount float64) 
 
 func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
 	if txnID == "" {
-		return nil, errors.New("invalid transaction ID")
+		return nil, errors.New("Invalid transaction ID")
 	}
 
 	payment := &models.Payment{

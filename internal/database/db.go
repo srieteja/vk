@@ -20,8 +20,8 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 
 func Migrate(db *gorm.DB) error {
 	return db.AutoMigrate(
-		&models.UserA{},
-		&models.UserB{},
+		&models.Advocate{},
+		&models.Client{},
 		&models.Call{},
 		&models.Payment{},
 		&models.Session{},

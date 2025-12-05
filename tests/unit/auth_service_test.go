@@ -16,7 +16,7 @@ func TestRegisterUserA(t *testing.T) {
 		Name:     "Test User",
 	}
 
-	user, err := service.RegisterUserA(req)
+	user, err := service.RegisterAdvocate(req)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -34,7 +34,7 @@ func TestRegisterUserA(t *testing.T) {
 func TestLoginUserA(t *testing.T) {
 	service := services.NewAuthService()
 
-	user, err := service.LoginUserA("test@example.com", "password123")
+	user, err := service.LoginAdvocate("test@example.com", "password123")
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -54,7 +54,7 @@ func TestRegisterUserA_InvalidEmail(t *testing.T) {
 		Name:     "Test",
 	}
 
-	_, err := service.RegisterUserA(req)
+	_, err := service.RegisterAdvocate(req)
 
 	if err == nil {
 		t.Fatalf("expected error for empty email")

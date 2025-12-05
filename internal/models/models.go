@@ -2,7 +2,7 @@ package models
 
 import "time"
 
-type UserA struct {
+type Advocate struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Email        string    `gorm:"uniqueIndex" json:"email"`
 	Password     string    `json:"-"`
@@ -17,11 +17,11 @@ type UserA struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-func (UserA) TableName() string {
-	return "users_a"
+func (Advocate) TableName() string {
+	return "advocates"
 }
 
-type UserB struct {
+type Client struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Email        string    `gorm:"uniqueIndex" json:"email"`
 	Password     string    `json:"-"`
@@ -33,8 +33,8 @@ type UserB struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
-func (UserB) TableName() string {
-	return "users_b"
+func (Client) TableName() string {
+	return "clients"
 }
 
 type Call struct {
@@ -59,13 +59,13 @@ func (Call) TableName() string {
 
 type Payment struct {
 	ID              uint      `gorm:"primaryKey" json:"id"`
-	UserBID         uint      `json:"user_b_id"`
-	UserAID         uint      `json:"user_a_id"`
+	ClientID        uint      `json:"client_id"`
+	AdvocateID      uint      `json:"advocate_id"`
 	Amount          float64   `json:"amount"`
 	Status          string    `json:"status"`
 	TransactionID   string    `gorm:"uniqueIndex" json:"transaction_id"`
 	PaymentGateway  string    `json:"payment_gateway"`
-	UserACommission float64   `json:"user_a_commission"`
+	UserACommission float64   `json:"advocate_commission"`
 	PlatformFee     float64   `json:"platform_fee"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
