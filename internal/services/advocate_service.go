@@ -3,17 +3,22 @@ package services
 import (
 	"errors"
 
+	"enterprise-api/internal/logger"
 	"enterprise-api/internal/models"
 
 	"gorm.io/gorm"
 )
 
 type AdvocateService struct {
-	db *gorm.DB
+	db     *gorm.DB
+	logger *logger.Logger
 }
 
 func NewAdvocateService(db *gorm.DB) *AdvocateService {
-	return &AdvocateService{db: db}
+	return &AdvocateService{
+		db:     db,
+		logger: logger.NewLogger("AdvocateService", logger.INFO),
+	}
 }
 
 func (s *AdvocateService) UpdateAvailability(advocateID uint, availability string) (*models.Advocate, error) {
@@ -77,8 +82,12 @@ func (s *AdvocateService) GetEarnings(advocateID uint) (map[string]interface{}, 
 
 	// Count total calls
 	var totalCalls int64
-	s.db.Model(&models.Call{}).Where("receiver_id = ? AND receiver_type = ? AND status = ?", advocateID, "advocate", "completed").Count(&totalCalls)
+	if err := s.db.Model(&models.Call{}).Where("receiver_id = ? AND receiver_type = ? AND status = ?", advocateID, "advocate", "completed").Count(&totalCalls).Error; err != nil {
+		s.logger.Severe("GetEarnings failed: error counting calls for advocate ID=%d: %v", advocateID, err)
+		return nil, errors.New("failed to count calls")
+	}
 
+	s.logger.Finer("GetEarnings: advocate ID=%d, earnings=%.2f, total_calls=%d", advocateID, advocate.Earnings, totalCalls)
 	return map[string]interface{}{
 		"earnings":    advocate.Earnings,
 		"total_calls": totalCalls,
@@ -94,4 +103,3 @@ func (s *AdvocateService) GetAvailableAdvocates() ([]models.Advocate, error) {
 
 	return advocates, nil
 }
-
