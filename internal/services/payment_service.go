@@ -1,16 +1,22 @@
 package services
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 
 	"enterprise-api/internal/models"
+
+	"gorm.io/gorm"
 )
 
-type PaymentService struct{}
+type PaymentService struct {
+	db *gorm.DB
+}
 
-func NewPaymentService() *PaymentService {
-	return &PaymentService{}
+func NewPaymentService(db *gorm.DB) *PaymentService {
+	return &PaymentService{db: db}
 }
 
 func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float64) (*models.Payment, error) {
@@ -18,25 +24,44 @@ func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float
 		return nil, errors.New("invalid amount")
 	}
 
+	// Generate unique transaction ID
+	b := make([]byte, 16)
+	rand.Read(b)
+	txnID := fmt.Sprintf("txn_%s", hex.EncodeToString(b))
+
 	payment := &models.Payment{
-		ClientID:        clientID,
-		AdvocateID:        advocateID,
+		ClientID:       clientID,
+		AdvocateID:     advocateID,
 		Amount:         amount,
 		Status:         "pending",
-		TransactionID:  fmt.Sprintf("txn_%d", clientID),
+		TransactionID:  txnID,
 		PaymentGateway: "stripe",
 	}
+
+	if err := s.db.Create(payment).Error; err != nil {
+		return nil, errors.New("failed to create payment")
+	}
+
 	return payment, nil
 }
 
 func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
 	if txnID == "" {
-		return nil, errors.New("Invalid transaction ID")
+		return nil, errors.New("invalid transaction ID")
 	}
 
-	payment := &models.Payment{
-		TransactionID: txnID,
-		Status:        "completed",
+	var payment models.Payment
+	if err := s.db.Where("transaction_id = ?", txnID).First(&payment).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New("transaction not found")
+		}
+		return nil, errors.New("database error")
 	}
-	return payment, nil
+
+	payment.Status = "completed"
+	if err := s.db.Save(&payment).Error; err != nil {
+		return nil, errors.New("failed to update payment")
+	}
+
+	return &payment, nil
 }
