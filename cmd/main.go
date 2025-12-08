@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 
 	"enterprise-api/internal/config"
 	"enterprise-api/internal/database"
+	"enterprise-api/internal/logger"
 	"enterprise-api/internal/middleware"
 	"enterprise-api/internal/models"
 	"enterprise-api/internal/services"
@@ -25,26 +25,43 @@ func main() {
 	godotenv.Load()
 
 	cfg := config.LoadConfig()
+
+	// Initialize logger
+	logPriority := logger.ParsePriority(cfg.LogLevel)
+	logger.Init("enterprise-api", logPriority)
+	log := logger.GetLogger()
+
+	log.Info("Initializing enterprise-api service")
+	log.Finer("Environment: %s, Log Level: %s", cfg.Environment, cfg.LogLevel)
+
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
+		log.Finer("Gin mode set to ReleaseMode")
 	}
 
 	// Initialize DB
+	log.Finer("Connecting to database...")
 	db, err := database.InitDB(cfg)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Severe("Failed to connect to database: %v", err)
+		os.Exit(1)
 	}
+	log.Info("Database connection established")
 
 	// Run migrations
+	log.Finer("Running database migrations...")
 	if err := database.Migrate(db); err != nil {
-		log.Fatalf("Failed to run migrations: %v", err)
+		log.Severe("Failed to run migrations: %v", err)
+		os.Exit(1)
 	}
+	log.Info("Database migrations completed")
 
 	// Gin router
 	router := gin.Default()
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
+		log.Finest("Health check requested")
 		c.JSON(200, gin.H{"status": "ok", "service": "enterprise-api"})
 	})
 
@@ -67,30 +84,37 @@ func main() {
 			// Advocate (Provider) routes
 			// ---------------------------
 			auth.POST("/advocate/register", func(c *gin.Context) {
+				log.Finer("Advocate registration request received")
 				var req models.RegisterRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
+					log.Finer("Invalid registration request: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
 				advocate, err := authService.RegisterAdvocate(&req)
 				if err != nil {
+					log.Info("Advocate registration failed: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
+				log.Info("Advocate registered successfully: ID=%d, Email=%s", advocate.ID, advocate.Email)
 				c.JSON(200, advocate)
 			})
 
 			auth.POST("/advocate/login", func(c *gin.Context) {
+				log.Finer("Advocate login request received")
 				var req models.LoginRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
+					log.Finer("Invalid login request: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
 				advocate, err := authService.LoginAdvocate(req.Email, req.Password)
 				if err != nil {
+					log.Info("Advocate login failed for email: %s", req.Email)
 					c.JSON(401, gin.H{"error": err.Error()})
 					return
 				}
@@ -98,9 +122,12 @@ func main() {
 				// Create session
 				session, err := authService.CreateSession(advocate.ID, "advocate")
 				if err != nil {
+					log.Severe("Failed to create session for advocate ID=%d: %v", advocate.ID, err)
 					c.JSON(500, gin.H{"error": "failed to create session"})
 					return
 				}
+
+				log.Info("Advocate logged in successfully: ID=%d, Email=%s", advocate.ID, advocate.Email)
 
 				// Return advocate with token
 				response := gin.H{
@@ -125,30 +152,37 @@ func main() {
 			// Client (Consumer) routes
 			// ---------------------------
 			auth.POST("/client/register", func(c *gin.Context) {
+				log.Finer("Client registration request received")
 				var req models.RegisterRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
+					log.Finer("Invalid registration request: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
 				client, err := authService.RegisterClient(&req)
 				if err != nil {
+					log.Info("Client registration failed: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
+				log.Info("Client registered successfully: ID=%d, Email=%s", client.ID, client.Email)
 				c.JSON(200, client)
 			})
 
 			auth.POST("/client/login", func(c *gin.Context) {
+				log.Finer("Client login request received")
 				var req models.LoginRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
+					log.Finer("Invalid login request: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
 				client, err := authService.LoginClient(req.Email, req.Password)
 				if err != nil {
+					log.Info("Client login failed for email: %s", req.Email)
 					c.JSON(401, gin.H{"error": err.Error()})
 					return
 				}
@@ -156,9 +190,12 @@ func main() {
 				// Create session
 				session, err := authService.CreateSession(client.ID, "client")
 				if err != nil {
+					log.Severe("Failed to create session for client ID=%d: %v", client.ID, err)
 					c.JSON(500, gin.H{"error": "failed to create session"})
 					return
 				}
+
+				log.Info("Client logged in successfully: ID=%d, Email=%s", client.ID, client.Email)
 
 				// Return client with token
 				response := gin.H{
@@ -443,9 +480,10 @@ func main() {
 	server := &http.Server{Addr: ":" + cfg.Port, Handler: router}
 
 	go func() {
-		log.Printf("Starting server on :%s", cfg.Port)
+		log.Info("Starting HTTP server on port :%s", cfg.Port)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Server error: %v", err)
+			log.Severe("Server error: %v", err)
+			os.Exit(1)
 		}
 	}()
 
@@ -454,8 +492,12 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("Shutting down server...")
+	log.Info("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	server.Shutdown(ctx)
+	if err := server.Shutdown(ctx); err != nil {
+		log.Severe("Server shutdown error: %v", err)
+	} else {
+		log.Info("Server shutdown completed successfully")
+	}
 }

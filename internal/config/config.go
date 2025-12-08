@@ -7,14 +7,15 @@ import (
 )
 
 type Config struct {
-	Port                 string
-	Environment          string
-	DatabaseURL          string
-	MaxConnections       int
-	JWTSecret            string
-	TokenExpiry          time.Duration
-	PlatformCommission   float64
-	UserBRatePerMinute   float64
+	Port               string
+	Environment        string
+	DatabaseURL        string
+	MaxConnections     int
+	JWTSecret          string
+	TokenExpiry        time.Duration
+	PlatformCommission float64
+	UserBRatePerMinute float64
+	LogLevel           string
 }
 
 func LoadConfig() *Config {
@@ -27,6 +28,7 @@ func LoadConfig() *Config {
 		TokenExpiry:        time.Duration(getEnvInt("TOKEN_EXPIRY", 86400)) * time.Second,
 		PlatformCommission: getEnvFloat("PLATFORM_COMMISSION_PERCENTAGE", 20.0),
 		UserBRatePerMinute: getEnvFloat("USERB_RATE_PER_MINUTE", 5.0),
+		LogLevel:           getEnv("LOG_LEVEL", "INFO"),
 	}
 }
 
