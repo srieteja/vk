@@ -60,12 +60,13 @@ func (l *Logger) SetOutput(w io.Writer) {
 
 // log writes a log message if the priority is high enough
 func (l *Logger) log(priority Priority, format string, args ...interface{}) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	// Check priority after acquiring lock to avoid race conditions
 	if priority > l.priority {
 		return
 	}
-
-	l.mu.Lock()
-	defer l.mu.Unlock()
 
 	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
 	priorityName := priorityNames[priority]
