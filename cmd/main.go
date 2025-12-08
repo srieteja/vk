@@ -85,10 +85,31 @@ func main() {
 			// ---------------------------
 			auth.POST("/advocate/register", func(c *gin.Context) {
 				log.Finer("Advocate registration request received")
+
+				// Check Content-Type header
+				contentType := c.GetHeader("Content-Type")
+				if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
+					log.Info("Invalid Content-Type: %s", contentType)
+					c.JSON(400, gin.H{"error": "Content-Type must be application/json"})
+					return
+				}
+
+				// Check if request body is empty
+				if c.Request.ContentLength == 0 {
+					log.Info("Empty request body received")
+					c.JSON(400, gin.H{"error": "request body is required"})
+					return
+				}
+
 				var req models.RegisterRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
-					log.Finer("Invalid registration request: %v", err)
-					c.JSON(400, gin.H{"error": err.Error()})
+					// Provide more specific error messages
+					errorMsg := err.Error()
+					if errorMsg == "EOF" {
+						errorMsg = "request body is empty or malformed. Please ensure you're sending valid JSON with email, password, and name fields"
+					}
+					log.Info("Invalid registration request: %v", err)
+					c.JSON(400, gin.H{"error": errorMsg})
 					return
 				}
 
