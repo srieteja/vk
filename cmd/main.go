@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,7 +16,6 @@ import (
 	"enterprise-api/internal/middleware"
 	"enterprise-api/internal/models"
 	"enterprise-api/internal/services"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -85,19 +86,17 @@ func main() {
 			// ---------------------------
 			auth.POST("/advocate/register", func(c *gin.Context) {
 				log.Finer("Advocate registration request received")
+				log.Finest("Request method: %s, Content-Type: %s, ContentLength: %d",
+					c.Request.Method, c.GetHeader("Content-Type"), c.Request.ContentLength)
 
-				// Check Content-Type header
+				// Check Content-Type header (be more lenient - allow charset variations)
 				contentType := c.GetHeader("Content-Type")
-				if contentType != "application/json" && contentType != "application/json; charset=utf-8" {
+				if contentType != "" && !strings.Contains(contentType, "application/json") {
 					log.Info("Invalid Content-Type: %s", contentType)
-					c.JSON(400, gin.H{"error": "Content-Type must be application/json"})
-					return
-				}
-
-				// Check if request body is empty
-				if c.Request.ContentLength == 0 {
-					log.Info("Empty request body received")
-					c.JSON(400, gin.H{"error": "request body is required"})
+					c.JSON(400, gin.H{
+						"error":    "Content-Type must be application/json",
+						"received": contentType,
+					})
 					return
 				}
 
@@ -108,8 +107,12 @@ func main() {
 					if errorMsg == "EOF" {
 						errorMsg = "request body is empty or malformed. Please ensure you're sending valid JSON with email, password, and name fields"
 					}
-					log.Info("Invalid registration request: %v", err)
-					c.JSON(400, gin.H{"error": errorMsg})
+					log.Info("Invalid registration request: %v, Content-Type: %s, ContentLength: %d",
+						err, contentType, c.Request.ContentLength)
+					c.JSON(400, gin.H{
+						"error": errorMsg,
+						"hint":  "Make sure you're using 'raw' body type with 'JSON' selected in Postman",
+					})
 					return
 				}
 
