@@ -70,7 +70,7 @@ func main() {
 	advocateService := services.NewAdvocateService(db)
 	callService := services.NewCallService(db)
 	paymentService := services.NewPaymentService(db)
-	webrtcService := services.NewWebRTCService()
+	webrtcService := services.NewWebRTCService(db, cfg.JWTSecret)
 
 	// Initialize middleware
 	authMiddleware := middleware.AuthMiddleware(db)
@@ -413,64 +413,86 @@ func main() {
 			})
 
 			calls.POST("/accept", func(c *gin.Context) {
+				userID, _ := c.Get("user_id")
+				log.Finer("Call accept request received: userID=%d", userID)
+
 				var req struct {
 					CallID uint `json:"call_id" binding:"required"`
 				}
 				if err := c.ShouldBindJSON(&req); err != nil {
+					log.Finer("Invalid accept call request: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
-				call, err := callService.AcceptCall(req.CallID)
+				call, err := callService.AcceptCall(req.CallID, userID.(uint))
 				if err != nil {
+					log.Info("Call accept failed: callID=%d, error=%v", req.CallID, err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
+				log.Info("Call accepted successfully: ID=%d", call.ID)
 				c.JSON(200, call)
 			})
 
 			calls.POST("/end", func(c *gin.Context) {
+				userID, _ := c.Get("user_id")
+				log.Finer("Call end request received: userID=%d", userID)
+
 				var req struct {
 					CallID uint `json:"call_id" binding:"required"`
 				}
 				if err := c.ShouldBindJSON(&req); err != nil {
+					log.Finer("Invalid end call request: %v", err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
-				call, err := callService.EndCall(req.CallID)
+				call, err := callService.EndCall(req.CallID, userID.(uint))
 				if err != nil {
+					log.Info("Call end failed: callID=%d, error=%v", req.CallID, err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
+				log.Info("Call ended successfully: ID=%d, Duration=%d seconds", call.ID, call.Duration)
 				c.JSON(200, call)
 			})
 
 			calls.GET("/token", func(c *gin.Context) {
+				userID, _ := c.Get("user_id")
+				log.Finer("WebRTC token request received: userID=%d", userID)
+
 				callIDStr := c.Query("call_id")
 				if callIDStr == "" {
+					log.Finer("WebRTC token request failed: missing call_id")
 					c.JSON(400, gin.H{"error": "call_id is required"})
 					return
 				}
 
 				callID, err := strconv.ParseUint(callIDStr, 10, 32)
 				if err != nil {
+					log.Finer("WebRTC token request failed: invalid call_id format: %s", callIDStr)
 					c.JSON(400, gin.H{"error": "invalid call_id"})
 					return
 				}
 
-				token, err := webrtcService.GenerateToken(callIDStr)
+				token, err := webrtcService.GenerateToken(callIDStr, userID.(uint))
 				if err != nil {
-					c.JSON(500, gin.H{"error": "failed to generate token"})
+					log.Info("WebRTC token generation failed: callID=%s, error=%v", callIDStr, err)
+					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
+				iceServers := webrtcService.GetICEServers()
+
+				log.Info("WebRTC token generated successfully: callID=%s, userID=%d", callIDStr, userID)
 				c.JSON(200, gin.H{
-					"token":      token,
-					"call_id":    callID,
-					"expires_at": time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+					"token":       token,
+					"call_id":     callID,
+					"expires_at":  time.Now().Add(1 * time.Hour).Format(time.RFC3339),
+					"ice_servers": iceServers,
 				})
 			})
 		}

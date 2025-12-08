@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"time"
 
 	"enterprise-api/internal/logger"
@@ -186,6 +187,10 @@ func (s *AuthService) CreateSession(userID uint, userType string) (*models.Sessi
 func generateToken() string {
 	// Generate a secure random token
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		// Fallback: use timestamp-based token if random generation fails
+		// This should rarely happen, but we need to handle it
+		return fmt.Sprintf("%d_%d", time.Now().UnixNano(), len(b))
+	}
 	return hex.EncodeToString(b)
 }
