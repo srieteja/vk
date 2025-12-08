@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"enterprise-api/internal/logger"
@@ -36,14 +37,14 @@ func NewWebRTCService(db *gorm.DB, secret string) *WebRTCService {
 }
 
 // GenerateToken generates a secure WebRTC token for a call
-func (s *WebRTCService) GenerateToken(callID string, userID uint) (string, error) {
-	s.logger.Finer("GenerateToken called for callID=%s, userID=%d", callID, userID)
+func (s *WebRTCService) GenerateToken(callID uint, userID uint) (string, error) {
+	s.logger.Finer("GenerateToken called for callID=%d, userID=%d", callID, userID)
 
 	// Validate call exists and user is authorized
 	var call models.Call
 	if err := s.db.First(&call, callID).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			s.logger.Info("GenerateToken failed: call not found: callID=%s", callID)
+			s.logger.Info("GenerateToken failed: call not found: callID=%d", callID)
 			return "", errors.New("call not found")
 		}
 		s.logger.Severe("GenerateToken failed: database error: %v", err)
@@ -52,20 +53,21 @@ func (s *WebRTCService) GenerateToken(callID string, userID uint) (string, error
 
 	// Verify user is part of this call
 	if call.CallerID != userID && call.ReceiverID != userID {
-		s.logger.Info("GenerateToken failed: user not authorized for call: callID=%s, userID=%d", callID, userID)
+		s.logger.Info("GenerateToken failed: user not authorized for call: callID=%d, userID=%d", callID, userID)
 		return "", errors.New("unauthorized access to call")
 	}
 
 	// Check call status
 	if call.Status != "initiated" && call.Status != "accepted" {
-		s.logger.Info("GenerateToken failed: invalid call status: callID=%s, status=%s", callID, call.Status)
+		s.logger.Info("GenerateToken failed: invalid call status: callID=%d, status=%s", callID, call.Status)
 		return "", errors.New("call is not active")
 	}
 
 	// Create token with expiration (1 hour)
+	// Convert callID to string for token storage
 	expiresAt := time.Now().Add(1 * time.Hour).Unix()
 	token := WebRTCToken{
-		CallID:    callID,
+		CallID:    fmt.Sprintf("%d", callID),
 		Type:      "webrtc",
 		ExpiresAt: expiresAt,
 	}
@@ -88,7 +90,7 @@ func (s *WebRTCService) GenerateToken(callID string, userID uint) (string, error
 	// Encode to base64 for transport
 	encodedToken := base64.URLEncoding.EncodeToString(data)
 
-	s.logger.Info("WebRTC token generated successfully: callID=%s, userID=%d", callID, userID)
+	s.logger.Info("WebRTC token generated successfully: callID=%d, userID=%d", callID, userID)
 	return encodedToken, nil
 }
 

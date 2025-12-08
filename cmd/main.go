@@ -478,19 +478,21 @@ func main() {
 					return
 				}
 
-				token, err := webrtcService.GenerateToken(callIDStr, userID.(uint))
+				// Convert parsed callID to uint for type safety
+				callIDUint := uint(callID)
+				token, err := webrtcService.GenerateToken(callIDUint, userID.(uint))
 				if err != nil {
-					log.Info("WebRTC token generation failed: callID=%s, error=%v", callIDStr, err)
+					log.Info("WebRTC token generation failed: callID=%d, error=%v", callIDUint, err)
 					c.JSON(400, gin.H{"error": err.Error()})
 					return
 				}
 
 				iceServers := webrtcService.GetICEServers()
 
-				log.Info("WebRTC token generated successfully: callID=%s, userID=%d", callIDStr, userID)
+				log.Info("WebRTC token generated successfully: callID=%d, userID=%d", callIDUint, userID)
 				c.JSON(200, gin.H{
 					"token":       token,
-					"call_id":     callID,
+					"call_id":     callIDUint,
 					"expires_at":  time.Now().Add(1 * time.Hour).Format(time.RFC3339),
 					"ice_servers": iceServers,
 				})

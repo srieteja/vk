@@ -165,8 +165,12 @@ func (s *AuthService) LoginClient(email, password string) (*models.Client, error
 func (s *AuthService) CreateSession(userID uint, userType string) (*models.Session, error) {
 	s.logger.Finer("CreateSession called for userID=%d, userType=%s", userID, userType)
 
-	// Generate a simple token (in production, use JWT or similar)
-	token := generateToken()
+	// Generate a secure token (in production, use JWT or similar)
+	token, err := generateToken()
+	if err != nil {
+		s.logger.Severe("CreateSession failed: token generation error: %v", err)
+		return nil, errors.New("failed to generate session token")
+	}
 
 	session := &models.Session{
 		UserID:    userID,
@@ -184,13 +188,13 @@ func (s *AuthService) CreateSession(userID uint, userType string) (*models.Sessi
 	return session, nil
 }
 
-func generateToken() string {
+func generateToken() (string, error) {
 	// Generate a secure random token
+	// If random number generation fails, we must fail the operation
+	// rather than using a predictable fallback that compromises security
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		// Fallback: use timestamp-based token if random generation fails
-		// This should rarely happen, but we need to handle it
-		return fmt.Sprintf("%d_%d", time.Now().UnixNano(), len(b))
+		return "", fmt.Errorf("failed to generate secure token: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
