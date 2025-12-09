@@ -16,6 +16,9 @@ type Config struct {
 	PlatformCommission float64
 	UserBRatePerMinute float64
 	LogLevel           string
+	GoogleClientID     string
+	GoogleClientSecret string
+	GoogleRedirectURL  string
 }
 
 func LoadConfig() *Config {
@@ -29,6 +32,9 @@ func LoadConfig() *Config {
 		PlatformCommission: getEnvFloat("PLATFORM_COMMISSION_PERCENTAGE", 20.0),
 		UserBRatePerMinute: getEnvFloat("USERB_RATE_PER_MINUTE", 5.0),
 		LogLevel:           getEnv("LOG_LEVEL", "INFO"),
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
 	}
 }
 

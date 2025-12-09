@@ -67,6 +67,27 @@ func (s *AdvocateService) GetProfile(advocateID uint) (*models.Advocate, error) 
 	return &advocate, nil
 }
 
+func (s *AdvocateService) UpdateProfileImage(advocateID uint, imageURL string) (*models.Advocate, error) {
+	if advocateID == 0 {
+		return nil, errors.New("invalid advocate ID")
+	}
+
+	var advocate models.Advocate
+	if err := s.db.First(&advocate, advocateID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New("advocate not found")
+		}
+		return nil, errors.New("database error")
+	}
+
+	advocate.ProfileImage = imageURL
+	if err := s.db.Save(&advocate).Error; err != nil {
+		return nil, errors.New("failed to update profile image")
+	}
+
+	return &advocate, nil
+}
+
 func (s *AdvocateService) GetEarnings(advocateID uint) (map[string]interface{}, error) {
 	if advocateID == 0 {
 		return nil, errors.New("invalid advocate ID")
@@ -95,9 +116,43 @@ func (s *AdvocateService) GetEarnings(advocateID uint) (map[string]interface{}, 
 	}, nil
 }
 
-func (s *AdvocateService) GetAvailableAdvocates() ([]models.Advocate, error) {
+type AdvocateFilter struct {
+	Availability string  // "all" or "available" (online)
+	Location     string  // City/location filter
+	MinRate      float64 // Minimum hourly rate
+	MaxRate      float64 // Maximum hourly rate
+}
+
+func (s *AdvocateService) GetAvailableAdvocates(filter *AdvocateFilter) ([]models.Advocate, error) {
+	query := s.db.Model(&models.Advocate{})
+
+	// Availability filter
+	if filter != nil && filter.Availability != "" {
+		if filter.Availability == "available" || filter.Availability == "online" {
+			query = query.Where("availability = ?", "available")
+		}
+		// If "all", don't filter by availability
+	} else {
+		// Default: only show available advocates
+		query = query.Where("availability = ?", "available")
+	}
+
+	// Location filter
+	if filter != nil && filter.Location != "" {
+		query = query.Where("LOWER(location) LIKE ?", "%"+filter.Location+"%")
+	}
+
+	// Rate range filter
+	if filter != nil && filter.MinRate > 0 {
+		query = query.Where("hourly_rate >= ?", filter.MinRate)
+	}
+	if filter != nil && filter.MaxRate > 0 {
+		query = query.Where("hourly_rate <= ?", filter.MaxRate)
+	}
+
 	var advocates []models.Advocate
-	if err := s.db.Where("availability = ?", "available").Find(&advocates).Error; err != nil {
+	if err := query.Find(&advocates).Error; err != nil {
+		s.logger.Severe("GetAvailableAdvocates failed: %v", err)
 		return nil, errors.New("failed to fetch advocates")
 	}
 

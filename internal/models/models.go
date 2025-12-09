@@ -9,6 +9,7 @@ type Advocate struct {
 	Name         string    `json:"name"`
 	Availability string    `json:"availability"`
 	UUID         string    `gorm:"type:uuid;uniqueIndex" json:"uuid"`
+	Location     string    `json:"location,omitempty"` // City/Location
 	ProfileImage string    `json:"profile_image,omitempty"`
 	Bio          string    `json:"bio,omitempty"`
 	Earnings     float64   `json:"earnings"`

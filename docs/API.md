@@ -22,6 +22,7 @@ Register a new Advocate (Provider)
   "name": "John Doe",
   "availability": "available",
   "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "location": "New York",
   "profile_image": "",
   "bio": "",
   "earnings": 0.0,
@@ -59,6 +60,7 @@ Login as Advocate (Provider)
   "name": "John Doe",
   "availability": "available",
   "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "location": "New York",
   "profile_image": "",
   "bio": "",
   "earnings": 0.0,
@@ -148,6 +150,53 @@ Login as Client (Consumer)
 
 ---
 
+### GET /api/auth/google/advocate
+Initiate Google OAuth login for Advocate
+
+**Description:** Redirects to Google OAuth consent screen for advocate authentication.
+
+**Response:** HTTP 307 Redirect to Google OAuth
+
+---
+
+### GET /api/auth/google/client
+Initiate Google OAuth login for Client
+
+**Description:** Redirects to Google OAuth consent screen for client authentication.
+
+**Response:** HTTP 307 Redirect to Google OAuth
+
+---
+
+### GET /api/auth/google/callback
+Google OAuth callback endpoint
+
+**Query Parameters:**
+- `code`: Authorization code from Google
+- `state`: State token containing user type
+
+**Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "user@example.com",
+  "name": "John Doe",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "profile_image": "https://...",
+  "token": "session_token_here",
+  ...
+}
+```
+
+**Error Response (400):**
+```json
+{
+  "error": "error message"
+}
+```
+
+---
+
 ## Advocate (Providers)
 
 ### PUT /api/advocate/availability
@@ -168,6 +217,7 @@ Update Advocate availability status
   "name": "John Doe",
   "availability": "available",
   "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "location": "New York",
   "profile_image": "",
   "bio": "",
   "earnings": 0.0,
@@ -202,6 +252,7 @@ Authorization: Bearer <token>
   "name": "John Doe",
   "availability": "available",
   "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "location": "New York",
   "profile_image": "",
   "bio": "",
   "earnings": 0.0,
@@ -246,14 +297,99 @@ Authorization: Bearer <token>
 
 ---
 
-## Client (Consumers)
-
-### GET /api/client/available-users
-Get list of available Advocates (Providers)
+### PUT /api/advocate/profile-image
+Update Advocate profile image
 
 **Headers:**
 ```
 Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "profile_image": "https://example.com/image.jpg"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "advocate@example.com",
+  "name": "John Doe",
+  "availability": "available",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "profile_image": "https://example.com/image.jpg",
+  ...
+}
+```
+
+**Error Response (400/401/403):**
+```json
+{
+  "error": "error message"
+}
+```
+
+---
+
+## Client (Consumers)
+
+### PUT /api/client/profile-image
+Update Client profile image
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Request Body:**
+```json
+{
+  "profile_image": "https://example.com/image.jpg"
+}
+```
+
+**Response (200 OK):**
+```json
+{
+  "id": 1,
+  "email": "client@example.com",
+  "name": "Jane Smith",
+  "uuid": "550e8400-e29b-41d4-a716-446655440000",
+  "profile_image": "https://example.com/image.jpg",
+  "balance": 0.0,
+  ...
+}
+```
+
+**Error Response (400/401/403):**
+```json
+{
+  "error": "error message"
+}
+```
+
+---
+
+### GET /api/client/available-users
+Get list of available Advocates (Providers) with optional filters
+
+**Headers:**
+```
+Authorization: Bearer <token>
+```
+
+**Query Parameters:**
+- `availability` (optional): Filter by availability status. Values: `"all"` (all advocates) or `"available"`/`"online"` (only available advocates). Default: `"available"`
+- `location` (optional): Filter by location/city (case-insensitive partial match)
+- `min_rate` (optional): Minimum hourly rate filter (numeric)
+- `max_rate` (optional): Maximum hourly rate filter (numeric)
+
+**Example Request:**
+```
+GET /api/client/available-users?availability=available&location=New York&min_rate=50&max_rate=100
 ```
 
 **Response (200 OK):**
@@ -265,6 +401,7 @@ Authorization: Bearer <token>
       "email": "advocate@example.com",
       "name": "John Doe",
       "availability": "available",
+      "location": "New York",
       "profile_image": "",
       "bio": "",
       "hourly_rate": 60.0

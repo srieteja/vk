@@ -165,6 +165,27 @@ func (s *AuthService) LoginClient(email, password string) (*models.Client, error
 	return &client, nil
 }
 
+func (s *AuthService) UpdateClientProfileImage(clientID uint, imageURL string) (*models.Client, error) {
+	if clientID == 0 {
+		return nil, errors.New("invalid client ID")
+	}
+
+	var client models.Client
+	if err := s.db.First(&client, clientID).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, errors.New("client not found")
+		}
+		return nil, errors.New("database error")
+	}
+
+	client.ProfileImage = imageURL
+	if err := s.db.Save(&client).Error; err != nil {
+		return nil, errors.New("failed to update profile image")
+	}
+
+	return &client, nil
+}
+
 func (s *AuthService) CreateSession(userID uint, userType string) (*models.Session, error) {
 	s.logger.Finer("CreateSession called for userID=%d, userType=%s", userID, userType)
 

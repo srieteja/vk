@@ -68,6 +68,7 @@ func main() {
 
 	// Initialize services
 	authService := services.NewAuthService(db)
+	oauthService := services.NewOAuthService(db, cfg, authService)
 	advocateService := services.NewAdvocateService(db)
 	callService := services.NewCallService(db)
 	paymentService := services.NewPaymentService(db)
@@ -236,6 +237,89 @@ func main() {
 
 				c.JSON(200, response)
 			})
+
+			// ---------------------------
+			// Google OAuth routes
+			// ---------------------------
+			auth.GET("/google/advocate", func(c *gin.Context) {
+				state := oauthService.GenerateState("advocate")
+				url := oauthService.GetAuthURL(state)
+				c.Redirect(http.StatusTemporaryRedirect, url)
+			})
+
+			auth.GET("/google/client", func(c *gin.Context) {
+				state := oauthService.GenerateState("client")
+				url := oauthService.GetAuthURL(state)
+				c.Redirect(http.StatusTemporaryRedirect, url)
+			})
+
+			auth.GET("/google/callback", func(c *gin.Context) {
+				code := c.Query("code")
+				state := c.Query("state")
+
+				if code == "" {
+					c.JSON(400, gin.H{"error": "missing authorization code"})
+					return
+				}
+
+				// Extract user type from state
+				var userType string
+				if strings.HasPrefix(state, "advocate_") {
+					userType = "advocate"
+				} else if strings.HasPrefix(state, "client_") {
+					userType = "client"
+				} else {
+					c.JSON(400, gin.H{"error": "invalid state"})
+					return
+				}
+
+				session, err := oauthService.HandleCallback(code, userType)
+				if err != nil {
+					log.Info("OAuth callback failed: %v", err)
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+
+				// Get user info to return
+				var userData gin.H
+				if userType == "advocate" {
+					var advocate models.Advocate
+					if err := db.First(&advocate, session.UserID).Error; err == nil {
+						userData = gin.H{
+							"id":            advocate.ID,
+							"email":         advocate.Email,
+							"name":          advocate.Name,
+							"availability":  advocate.Availability,
+							"uuid":          advocate.UUID,
+							"profile_image": advocate.ProfileImage,
+							"bio":           advocate.Bio,
+							"earnings":      advocate.Earnings,
+							"hourly_rate":   advocate.HourlyRate,
+							"created_at":    advocate.CreatedAt,
+							"updated_at":    advocate.UpdatedAt,
+							"token":         session.Token,
+						}
+					}
+				} else {
+					var client models.Client
+					if err := db.First(&client, session.UserID).Error; err == nil {
+						userData = gin.H{
+							"id":            client.ID,
+							"email":         client.Email,
+							"name":          client.Name,
+							"uuid":          client.UUID,
+							"profile_image": client.ProfileImage,
+							"balance":       client.Balance,
+							"created_at":    client.CreatedAt,
+							"updated_at":    client.UpdatedAt,
+							"token":         session.Token,
+						}
+					}
+				}
+
+				log.Info("OAuth login successful: UserType=%s, UserID=%d", userType, session.UserID)
+				c.JSON(200, userData)
+			})
 		}
 
 		// ---------------------------
@@ -305,6 +389,32 @@ func main() {
 
 				c.JSON(200, earnings)
 			})
+
+			advocate.PUT("/profile-image", func(c *gin.Context) {
+				userID, _ := c.Get("user_id")
+				userType, _ := c.Get("user_type")
+
+				if userType != "advocate" {
+					c.JSON(403, gin.H{"error": "access denied"})
+					return
+				}
+
+				var req struct {
+					ProfileImage string `json:"profile_image" binding:"required"`
+				}
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+
+				advocate, err := advocateService.UpdateProfileImage(userID.(uint), req.ProfileImage)
+				if err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+
+				c.JSON(200, advocate)
+			})
 		}
 
 		// ---------------------------
@@ -313,8 +423,52 @@ func main() {
 		client := api.Group("/client")
 		client.Use(authMiddleware)
 		{
+			client.PUT("/profile-image", func(c *gin.Context) {
+				userID, _ := c.Get("user_id")
+				userType, _ := c.Get("user_type")
+
+				if userType != "client" {
+					c.JSON(403, gin.H{"error": "access denied"})
+					return
+				}
+
+				var req struct {
+					ProfileImage string `json:"profile_image" binding:"required"`
+				}
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+
+				client, err := authService.UpdateClientProfileImage(userID.(uint), req.ProfileImage)
+				if err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+
+				c.JSON(200, client)
+			})
+
 			client.GET("/available-users", func(c *gin.Context) {
-				advocates, err := advocateService.GetAvailableAdvocates()
+				// Parse query parameters
+				filter := &services.AdvocateFilter{
+					Availability: c.Query("availability"), // "all" or "available"/"online"
+					Location:     c.Query("location"),
+				}
+
+				// Parse rate range
+				if minRateStr := c.Query("min_rate"); minRateStr != "" {
+					if minRate, err := strconv.ParseFloat(minRateStr, 64); err == nil {
+						filter.MinRate = minRate
+					}
+				}
+				if maxRateStr := c.Query("max_rate"); maxRateStr != "" {
+					if maxRate, err := strconv.ParseFloat(maxRateStr, 64); err == nil {
+						filter.MaxRate = maxRate
+					}
+				}
+
+				advocates, err := advocateService.GetAvailableAdvocates(filter)
 				if err != nil {
 					c.JSON(500, gin.H{"error": err.Error()})
 					return
@@ -328,6 +482,7 @@ func main() {
 						"email":         a.Email,
 						"name":          a.Name,
 						"availability":  a.Availability,
+						"location":      a.Location,
 						"profile_image": a.ProfileImage,
 						"bio":           a.Bio,
 						"hourly_rate":   a.HourlyRate,

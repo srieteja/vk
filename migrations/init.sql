@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS advocates (
     name VARCHAR(255) NOT NULL,
     availability VARCHAR(50) DEFAULT 'available',
     uuid UUID UNIQUE NOT NULL DEFAULT gen_random_uuid(),
+    location VARCHAR(255),
     profile_image TEXT,
     bio TEXT,
     earnings DECIMAL(10, 2) DEFAULT 0.00,
