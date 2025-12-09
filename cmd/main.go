@@ -49,13 +49,13 @@ func main() {
 	}
 	log.Info("Database connection established")
 
-	// Run migrations
-	log.Finer("Running database migrations...")
-	if err := database.Migrate(db); err != nil {
-		log.Severe("Failed to run migrations: %v", err)
+	// Initialize database schema
+	log.Finer("Initializing database schema...")
+	if err := database.InitSchema(db); err != nil {
+		log.Severe("Failed to initialize schema: %v", err)
 		os.Exit(1)
 	}
-	log.Info("Database migrations completed")
+	log.Info("Database schema initialized")
 
 	// Gin router
 	router := gin.Default()
@@ -159,7 +159,7 @@ func main() {
 					"email":         advocate.Email,
 					"name":          advocate.Name,
 					"availability":  advocate.Availability,
-					"google_id":     advocate.GoogleID,
+					"uuid":          advocate.UUID,
 					"profile_image": advocate.ProfileImage,
 					"bio":           advocate.Bio,
 					"earnings":      advocate.Earnings,
@@ -226,7 +226,7 @@ func main() {
 					"id":            client.ID,
 					"email":         client.Email,
 					"name":          client.Name,
-					"google_id":     client.GoogleID,
+					"uuid":          client.UUID,
 					"profile_image": client.ProfileImage,
 					"balance":       client.Balance,
 					"created_at":    client.CreatedAt,

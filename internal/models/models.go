@@ -8,7 +8,7 @@ type Advocate struct {
 	Password     string    `json:"-"`
 	Name         string    `json:"name"`
 	Availability string    `json:"availability"`
-	GoogleID     string    `json:"google_id,omitempty"`
+	UUID         string    `gorm:"type:uuid;uniqueIndex" json:"uuid"`
 	ProfileImage string    `json:"profile_image,omitempty"`
 	Bio          string    `json:"bio,omitempty"`
 	Earnings     float64   `json:"earnings"`
@@ -26,7 +26,7 @@ type Client struct {
 	Email        string    `gorm:"uniqueIndex" json:"email"`
 	Password     string    `json:"-"`
 	Name         string    `json:"name"`
-	GoogleID     string    `json:"google_id,omitempty"`
+	UUID         string    `gorm:"type:uuid;uniqueIndex" json:"uuid"`
 	ProfileImage string    `json:"profile_image,omitempty"`
 	Balance      float64   `json:"balance"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -38,19 +38,19 @@ func (Client) TableName() string {
 }
 
 type Call struct {
-	ID            uint       `gorm:"primaryKey" json:"id"`
-	CallerID      uint       `json:"caller_id"`
-	CallerType    string     `json:"caller_type"`
-	ReceiverID    uint       `json:"receiver_id"`
-	ReceiverType  string     `json:"receiver_type"`
-	Status        string     `json:"status"`
-	Duration      int64      `json:"duration"`
-	ChargeAmount  float64    `json:"charge_amount"`
-	PaymentID     *uint      `json:"payment_id,omitempty"`
-	StartedAt     *time.Time `json:"started_at,omitempty"`
-	EndedAt       *time.Time `json:"ended_at,omitempty"`
-	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	CallerID     uint       `json:"caller_id"`
+	CallerType   string     `json:"caller_type"`
+	ReceiverID   uint       `json:"receiver_id"`
+	ReceiverType string     `json:"receiver_type"`
+	Status       string     `json:"status"`
+	Duration     int64      `json:"duration"`
+	ChargeAmount float64    `json:"charge_amount"`
+	PaymentID    *uint      `json:"payment_id,omitempty"`
+	StartedAt    *time.Time `json:"started_at,omitempty"`
+	EndedAt      *time.Time `json:"ended_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func (Call) TableName() string {

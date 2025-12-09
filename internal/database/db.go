@@ -18,7 +18,7 @@ func InitDB(cfg *config.Config) (*gorm.DB, error) {
 	return db, nil
 }
 
-func Migrate(db *gorm.DB) error {
+func InitSchema(db *gorm.DB) error {
 	return db.AutoMigrate(
 		&models.Advocate{},
 		&models.Client{},

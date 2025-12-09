@@ -10,6 +10,7 @@ import (
 	"enterprise-api/internal/logger"
 	"enterprise-api/internal/models"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -54,6 +55,7 @@ func (s *AuthService) RegisterAdvocate(req *models.RegisterRequest) (*models.Adv
 		Password:     string(hash),
 		Name:         req.Name,
 		Availability: "available",
+		UUID:         uuid.New().String(),
 		Earnings:     0.0,
 		HourlyRate:   0.0,
 	}
@@ -122,6 +124,7 @@ func (s *AuthService) RegisterClient(req *models.RegisterRequest) (*models.Clien
 		Email:    req.Email,
 		Password: string(hash),
 		Name:     req.Name,
+		UUID:     uuid.New().String(),
 		Balance:  0.0,
 	}
 
