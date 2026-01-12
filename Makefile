@@ -12,7 +12,7 @@ help:
 	@echo "  make docker-down  - Stop Docker"
 
 build:
-	go build -o bin/enterprise-api cmd/main.go
+	go build -o bin/vk_backend cmd/main.go
 
 run:
 	go run cmd/main.go

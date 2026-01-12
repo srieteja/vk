@@ -3,7 +3,7 @@
 ## Quick Start
 
 1.  **Prerequisites:** Ensure Go 1.24+ and Docker are installed.
-2.  **Clone & Enter:** `cd enterprise-api`
+2.  **Clone & Enter:** `cd vk_backend`
 3.  **Config:** `cp .env.example .env` and fill in your API keys (Google, Anthropic, etc.).
 4.  **Dependencies:** `go mod download`
 5.  **Infrastructure:** `make docker-up` (Starts Postgres & Redis)

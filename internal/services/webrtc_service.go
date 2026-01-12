@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"time"
 
-	"enterprise-api/internal/logger"
-	"enterprise-api/internal/models"
+	"vk_backend/internal/logger"
+	"vk_backend/internal/models"
 
 	"gorm.io/gorm"
 )

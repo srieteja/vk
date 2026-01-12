@@ -10,12 +10,12 @@ import (
 	"syscall"
 	"time"
 
-	"enterprise-api/internal/config"
-	"enterprise-api/internal/database"
-	"enterprise-api/internal/logger"
-	"enterprise-api/internal/middleware"
-	"enterprise-api/internal/models"
-	"enterprise-api/internal/services"
+	"vk_backend/internal/config"
+	"vk_backend/internal/database"
+	"vk_backend/internal/logger"
+	"vk_backend/internal/middleware"
+	"vk_backend/internal/models"
+	"vk_backend/internal/services"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
@@ -29,10 +29,10 @@ func main() {
 
 	// Initialize logger
 	logPriority := logger.ParsePriority(cfg.LogLevel)
-	logger.Init("enterprise-api", logPriority)
+	logger.Init("vk_backend", logPriority)
 	log := logger.GetLogger()
 
-	log.Info("Initializing enterprise-api service")
+	log.Info("Initializing vk_backend service")
 	log.Finer("Environment: %s, Log Level: %s", cfg.Environment, cfg.LogLevel)
 
 	if cfg.Environment == "production" {
@@ -69,7 +69,7 @@ func main() {
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
 		log.Finest("Health check requested")
-		c.JSON(200, gin.H{"status": "ok", "service": "enterprise-api"})
+		c.JSON(200, gin.H{"status": "ok", "service": "vk_backend"})
 	})
 
 	// Initialize services
@@ -77,7 +77,7 @@ func main() {
 	oauthService := services.NewOAuthService(db, cfg, authService)
 	advocateService := services.NewAdvocateService(db)
 	callService := services.NewCallService(db)
-	paymentService := services.NewPaymentService(db)
+	paymentService := services.NewPaymentService(db, cfg)
 	webrtcService := services.NewWebRTCService(db, cfg.JWTSecret)
 
 	// Initialize middleware

@@ -3,12 +3,13 @@ package unit
 import (
 	"testing"
 
-	"enterprise-api/internal/models"
-	"enterprise-api/internal/services"
+	"vk_backend/internal/models"
+	"vk_backend/internal/services"
 )
 
 func TestRegisterUserA(t *testing.T) {
-	service := services.NewAuthService()
+	db := setupTestDB()
+	service := services.NewAuthService(db)
 
 	req := &models.RegisterRequest{
 		Email:    "test@example.com",
@@ -32,7 +33,19 @@ func TestRegisterUserA(t *testing.T) {
 }
 
 func TestLoginUserA(t *testing.T) {
-	service := services.NewAuthService()
+	db := setupTestDB()
+	service := services.NewAuthService(db)
+
+	// Need to register first
+	req := &models.RegisterRequest{
+		Email:    "test@example.com",
+		Password: "password123",
+		Name:     "Test User",
+	}
+	_, err := service.RegisterAdvocate(req)
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
 
 	user, err := service.LoginAdvocate("test@example.com", "password123")
 
@@ -46,7 +59,8 @@ func TestLoginUserA(t *testing.T) {
 }
 
 func TestRegisterUserA_InvalidEmail(t *testing.T) {
-	service := services.NewAuthService()
+	db := setupTestDB()
+	service := services.NewAuthService(db)
 
 	req := &models.RegisterRequest{
 		Email:    "",

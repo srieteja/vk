@@ -159,7 +159,7 @@ func Init(serviceName string, priority Priority) {
 // GetLogger returns the global logger instance
 func GetLogger() *Logger {
 	if defaultLogger == nil {
-		Init("enterprise-api", INFO)
+		Init("vk_backend", INFO)
 	}
 	return defaultLogger
 }

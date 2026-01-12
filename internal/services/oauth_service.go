@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 
-	"enterprise-api/internal/config"
-	"enterprise-api/internal/logger"
-	"enterprise-api/internal/models"
+	"vk_backend/internal/config"
+	"vk_backend/internal/logger"
+	"vk_backend/internal/models"
 
 	"github.com/google/uuid"
 	"golang.org/x/oauth2"

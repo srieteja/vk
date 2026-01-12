@@ -3,8 +3,8 @@ package database
 import (
 	"fmt"
 
-	"enterprise-api/internal/config"
-	"enterprise-api/internal/models"
+	"vk_backend/internal/config"
+	"vk_backend/internal/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"

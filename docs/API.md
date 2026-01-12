@@ -736,6 +736,6 @@ Health check endpoint
 ```json
 {
   "status": "ok",
-  "service": "enterprise-api"
+  "service": "vk_backend"
 }
 ```

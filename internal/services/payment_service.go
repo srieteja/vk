@@ -6,20 +6,23 @@ import (
 	"errors"
 	"fmt"
 
-	"enterprise-api/internal/logger"
-	"enterprise-api/internal/models"
+	"vk_backend/internal/config"
+	"vk_backend/internal/logger"
+	"vk_backend/internal/models"
 
 	"gorm.io/gorm"
 )
 
 type PaymentService struct {
 	db     *gorm.DB
+	cfg    *config.Config
 	logger *logger.Logger
 }
 
-func NewPaymentService(db *gorm.DB) *PaymentService {
+func NewPaymentService(db *gorm.DB, cfg *config.Config) *PaymentService {
 	return &PaymentService{
 		db:     db,
+		cfg:    cfg,
 		logger: logger.NewLogger("PaymentService", logger.INFO),
 	}
 }
@@ -32,6 +35,10 @@ func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float
 		return nil, errors.New("invalid amount")
 	}
 
+	// Calculate commission and fees
+	platformFee := amount * (s.cfg.PlatformCommission / 100.0)
+	advocateCommission := amount - platformFee
+
 	// Generate unique transaction ID
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
@@ -41,12 +48,14 @@ func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float
 	txnID := fmt.Sprintf("txn_%s", hex.EncodeToString(b))
 
 	payment := &models.Payment{
-		ClientID:       clientID,
-		AdvocateID:     advocateID,
-		Amount:         amount,
-		Status:         "pending",
-		TransactionID:  txnID,
-		PaymentGateway: "stripe",
+		ClientID:        clientID,
+		AdvocateID:      advocateID,
+		Amount:          amount,
+		Status:          "pending",
+		TransactionID:   txnID,
+		PaymentGateway:  "stripe",
+		UserACommission: advocateCommission,
+		PlatformFee:     platformFee,
 	}
 
 	if err := s.db.Create(payment).Error; err != nil {
@@ -76,10 +85,30 @@ func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
 		return nil, errors.New("database error")
 	}
 
-	payment.Status = "completed"
-	if err := s.db.Save(&payment).Error; err != nil {
-		s.logger.Severe("VerifyPayment failed: failed to update payment: %v", err)
-		return nil, errors.New("failed to update payment")
+	if payment.Status == "completed" {
+		s.logger.Info("VerifyPayment: transaction already completed: %s", txnID)
+		return &payment, nil
+	}
+
+	// Use transaction to ensure data consistency
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		payment.Status = "completed"
+		if err := tx.Save(&payment).Error; err != nil {
+			return err
+		}
+
+		// Update advocate earnings
+		if err := tx.Model(&models.Advocate{}).Where("id = ?", payment.AdvocateID).
+			UpdateColumn("earnings", gorm.Expr("earnings + ?", payment.UserACommission)).Error; err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Severe("VerifyPayment failed: transaction error: %v", err)
+		return nil, errors.New("failed to complete payment")
 	}
 
 	s.logger.Info("Payment verified successfully: ID=%d, TransactionID=%s", payment.ID, payment.TransactionID)

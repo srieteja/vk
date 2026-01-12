@@ -4,11 +4,11 @@ RUN apk add --no-cache git
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -o enterprise-api cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -o vk_backend cmd/main.go
 
 FROM alpine:latest
 RUN apk --no-cache add ca-certificates
 WORKDIR /root/
-COPY --from=builder /app/enterprise-api .
+COPY --from=builder /app/vk_backend .
 EXPOSE 8080
-CMD ["./enterprise-api"]
+CMD ["./vk_backend"]

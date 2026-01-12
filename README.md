@@ -6,7 +6,7 @@ Production-ready Go backend API with dual user system, video calling, and paymen
 
 ```bash
 python3 generate_project.py  # Generate complete project
-cd enterprise-api
+cd vk_backend
 cp .env.example .env
 go mod download
 docker-compose up -d postgres

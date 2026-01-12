@@ -2,14 +2,14 @@ package unit
 
 import (
 	"testing"
-
-	"enterprise-api/internal/services"
+	"vk_backend/internal/services"
 )
 
 func TestInitiateCall(t *testing.T) {
-	service := services.NewCallService()
+	db := setupTestDB()
+	service := services.NewCallService(db)
 
-	call, err := service.InitiateCall(1, 2)
+	call, err := service.InitiateCall(1, "client", 2, "advocate")
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -25,9 +25,17 @@ func TestInitiateCall(t *testing.T) {
 }
 
 func TestAcceptCall(t *testing.T) {
-	service := services.NewCallService()
+	db := setupTestDB()
+	service := services.NewCallService(db)
 
-	call, err := service.AcceptCall(1)
+	// First initiate a call
+	createdCall, err := service.InitiateCall(1, "client", 2, "advocate")
+	if err != nil {
+		t.Fatalf("failed to initiate call: %v", err)
+	}
+
+	// Then accept it as the receiver
+	call, err := service.AcceptCall(createdCall.ID, 2)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -39,9 +47,23 @@ func TestAcceptCall(t *testing.T) {
 }
 
 func TestEndCall(t *testing.T) {
-	service := services.NewCallService()
+	db := setupTestDB()
+	service := services.NewCallService(db)
 
-	call, err := service.EndCall(1)
+	// First initiate
+	createdCall, err := service.InitiateCall(1, "client", 2, "advocate")
+	if err != nil {
+		t.Fatalf("failed to initiate call: %v", err)
+	}
+
+	// Then accept
+	_, err = service.AcceptCall(createdCall.ID, 2)
+	if err != nil {
+		t.Fatalf("failed to accept call: %v", err)
+	}
+
+	// Then end it (as either party, let's say caller)
+	call, err := service.EndCall(createdCall.ID, 1)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
