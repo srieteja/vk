@@ -665,6 +665,68 @@ call_id: integer (required)
 
 ---
 
+## LLM Service
+
+### Chat Completion
+
+`POST /api/llm/chat`
+
+Get a chat completion from the LLM service.
+
+#### Headers
+
+```
+Authorization: Bearer <your_jwt_token>
+Content-Type: application/json
+```
+
+#### Request Body
+
+```json
+{
+  "user_id": "user123",
+  "message": "Hello, how are you?",
+  "history": [
+    {"role": "user", "content": "Hi there"},
+    {"role": "assistant", "content": "Hello! How can I help you today?"}
+  ]
+}
+```
+
+#### Response
+
+```json
+{
+  "response": "I'm doing well, thank you for asking! How can I assist you today?",
+  "tokens_used": 42,
+  "provider": "anthropic",
+  "latency_ms": 1234.56,
+  "cached": false
+}
+```
+
+### Health Check
+
+`GET /api/llm/health`
+
+Check the health status of the LLM service.
+
+#### Response
+
+Success (200 OK):
+```json
+{
+  "status": "healthy"
+}
+```
+
+Error (503 Service Unavailable):
+```json
+{
+  "status": "unhealthy",
+  "error": "error message"
+}
+```
 ## Health
 
 ### GET /health

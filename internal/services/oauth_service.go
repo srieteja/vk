@@ -67,6 +67,7 @@ func (s *OAuthService) HandleCallback(code string, userType string) (*models.Ses
 	defer resp.Body.Close()
 
 	var userInfo struct {
+		ID      string `json:"id"`
 		Email   string `json:"email"`
 		Name    string `json:"name"`
 		Picture string `json:"picture"`
@@ -105,6 +106,7 @@ func (s *OAuthService) HandleCallback(code string, userType string) (*models.Ses
 }
 
 func (s *OAuthService) findOrCreateAdvocate(userInfo struct {
+	ID      string `json:"id"`
 	Email   string `json:"email"`
 	Name    string `json:"name"`
 	Picture string `json:"picture"`
@@ -119,6 +121,11 @@ func (s *OAuthService) findOrCreateAdvocate(userInfo struct {
 			advocate.ProfileImage = userInfo.Picture
 			s.db.Save(&advocate)
 		}
+		// Update GoogleID if not set
+		if advocate.GoogleID == nil {
+			advocate.GoogleID = &userInfo.ID
+			s.db.Save(&advocate)
+		}
 		s.logger.Info("Advocate found via OAuth: ID=%d, Email=%s", advocate.ID, advocate.Email)
 		return &advocate, nil
 	}
@@ -131,6 +138,7 @@ func (s *OAuthService) findOrCreateAdvocate(userInfo struct {
 	// Create new advocate
 	advocate = models.Advocate{
 		Email:        userInfo.Email,
+		GoogleID:     &userInfo.ID,
 		Password:     "", // OAuth users don't have passwords
 		Name:         userInfo.Name,
 		Availability: "available",
@@ -150,6 +158,7 @@ func (s *OAuthService) findOrCreateAdvocate(userInfo struct {
 }
 
 func (s *OAuthService) findOrCreateClient(userInfo struct {
+	ID      string `json:"id"`
 	Email   string `json:"email"`
 	Name    string `json:"name"`
 	Picture string `json:"picture"`
@@ -164,6 +173,11 @@ func (s *OAuthService) findOrCreateClient(userInfo struct {
 			client.ProfileImage = userInfo.Picture
 			s.db.Save(&client)
 		}
+		// Update GoogleID if not set
+		if client.GoogleID == nil {
+			client.GoogleID = &userInfo.ID
+			s.db.Save(&client)
+		}
 		s.logger.Info("Client found via OAuth: ID=%d, Email=%s", client.ID, client.Email)
 		return &client, nil
 	}
@@ -176,6 +190,7 @@ func (s *OAuthService) findOrCreateClient(userInfo struct {
 	// Create new client
 	client = models.Client{
 		Email:        userInfo.Email,
+		GoogleID:     &userInfo.ID,
 		Password:     "", // OAuth users don't have passwords
 		Name:         userInfo.Name,
 		UUID:         uuid.New().String(),
@@ -196,3 +211,4 @@ func (s *OAuthService) GenerateState(userType string) string {
 	// Generate a simple state token (in production, use a more secure method)
 	return fmt.Sprintf("%s_%s", userType, uuid.New().String())
 }
+

@@ -49,6 +49,12 @@ func main() {
 	}
 	log.Info("Database connection established")
 
+	// Initialize LLM service
+	log.Info("Initializing LLM service...")
+	llmService := services.NewLLMService(db)
+	llmService.Start(cfg)
+	log.Info("LLM service initialized")
+
 	// Initialize database schema
 	log.Finer("Initializing database schema...")
 	if err := database.InitSchema(db); err != nil {
@@ -677,6 +683,21 @@ func main() {
 				})
 			})
 		}
+	}
+
+	// LLM endpoints
+	llmGroup := api.Group("/llm")
+	{
+		// Chat endpoint (protected by auth)
+		llmGroup.POST("/chat", authMiddleware, func(c *gin.Context) {
+			services.HandleChat(c.Writer, c.Request)
+		})
+
+		// Health check endpoint (public)
+		llmGroup.GET("/health", func(c *gin.Context) {
+			handleHealth := http.HandlerFunc(services.HandleHealth)
+			handleHealth.ServeHTTP(c.Writer, c.Request)
+		})
 	}
 
 	// HTTP server

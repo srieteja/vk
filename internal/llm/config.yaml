@@ -1,0 +1,30 @@
+llm:
+	primary_provider: "anthropic"
+	fallback_provider: "openai"
+
+	anthropic:
+		api_key: "${ANTHROPIC_API_KEY}"
+		model: "claude-haiku-4-5-20251001"
+		max_tokens: 1024
+		timeout: 30s
+
+	openai:
+		api_key: "${OPENAI_API_KEY}"
+		model: "gpt-4o-mini"
+		max_tokens: 1024
+		timeout: 30s
+
+cache:
+	enabled: true
+	redis_url: "localhost:6379"
+	ttl: 3600  # 1 hour
+
+rate_limit:
+	requests_per_minute: 60
+	burst: 10
+	per_user_rpm: 10
+
+circuit_breaker:
+	max_failures: 5
+	timeout: 60s
+	reset_timeout: 30s

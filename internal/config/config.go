@@ -19,6 +19,10 @@ type Config struct {
 	GoogleClientID     string
 	GoogleClientSecret string
 	GoogleRedirectURL  string
+	AnthropicAPIKey    string
+	OpenAIAPIKey       string
+	CustomLLMBaseURL   string
+	CustomLLMModel     string
 }
 
 func LoadConfig() *Config {
@@ -35,6 +39,10 @@ func LoadConfig() *Config {
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
+		AnthropicAPIKey:    getEnv("ANTHROPIC_API_KEY", ""),
+		OpenAIAPIKey:       getEnv("OPENAI_API_KEY", ""),
+		CustomLLMBaseURL:   getEnv("CUSTOM_LLM_BASE_URL", "http://localhost:11434/v1"), // Default to Ollama
+		CustomLLMModel:     getEnv("CUSTOM_LLM_MODEL", "llama3"),
 	}
 }
 

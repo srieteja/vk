@@ -1,0 +1,22 @@
+llm:
+  primary_provider: "openai"
+  secondary_provider: "anthropic"
+
+  openai:
+    api_key:
+    model: "gpt-4o-mini"
+    max_tokens: 1024
+    timeout: 30s
+
+  anthropic:
+    api_key:
+    model: "claude-haiku-4-5-20251001"
+    max_tokens: 1024
+    timeout: 30s
+
+cache:
+  enabled: true
+  redis_url: "localhost:6379"
+  ttl: 3600
+
+ratelimit:

@@ -5,6 +5,7 @@ import "time"
 type Advocate struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Email        string    `gorm:"uniqueIndex" json:"email"`
+	GoogleID     *string   `gorm:"uniqueIndex" json:"google_id,omitempty"`
 	Password     string    `json:"-"`
 	Name         string    `json:"name"`
 	Availability string    `json:"availability"`
@@ -25,6 +26,7 @@ func (Advocate) TableName() string {
 type Client struct {
 	ID           uint      `gorm:"primaryKey" json:"id"`
 	Email        string    `gorm:"uniqueIndex" json:"email"`
+	GoogleID     *string   `gorm:"uniqueIndex" json:"google_id,omitempty"`
 	Password     string    `json:"-"`
 	Name         string    `json:"name"`
 	UUID         string    `gorm:"type:uuid;uniqueIndex" json:"uuid"`
