@@ -79,6 +79,7 @@ func main() {
 	callService := services.NewCallService(db)
 	paymentService := services.NewPaymentService(db, cfg)
 	webrtcService := services.NewWebRTCService(db, cfg.JWTSecret)
+	signalingService := services.NewSignalingService(webrtcService)
 
 	// Initialize middleware
 	authMiddleware := middleware.AuthMiddleware(db)
@@ -86,6 +87,11 @@ func main() {
 	// API routes
 	api := router.Group("/api")
 	{
+		// WebSocket Signaling Endpoint (Public, handles its own auth via token)
+		api.GET("/ws/signal", func(c *gin.Context) {
+			signalingService.HandleWebSocket(c.Writer, c.Request)
+		})
+
 		auth := api.Group("/auth")
 		{
 			// ---------------------------
@@ -499,6 +505,26 @@ func main() {
 					"users": users,
 					"count": len(users),
 				})
+			})
+
+			client.GET("/advocate/:id/schedule", func(c *gin.Context) {
+				idStr := c.Param("id")
+				id, err := strconv.ParseUint(idStr, 10, 32)
+				if err != nil {
+					c.JSON(400, gin.H{"error": "invalid advocate id"})
+					return
+				}
+
+				from := c.Query("from")
+				to := c.Query("to")
+
+				schedule, err := advocateService.GetAdvocateSchedule(uint(id), from, to)
+				if err != nil {
+					c.JSON(500, gin.H{"error": err.Error()})
+					return
+				}
+
+				c.JSON(200, schedule)
 			})
 
 			payment := client.Group("/payment")

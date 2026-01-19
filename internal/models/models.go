@@ -50,6 +50,7 @@ type Call struct {
 	Duration     int64      `json:"duration"`
 	ChargeAmount float64    `json:"charge_amount"`
 	PaymentID    *uint      `json:"payment_id,omitempty"`
+	ScheduledAt  *time.Time `json:"scheduled_at,omitempty"`
 	StartedAt    *time.Time `json:"started_at,omitempty"`
 	EndedAt      *time.Time `json:"ended_at,omitempty"`
 	CreatedAt    time.Time  `json:"created_at"`

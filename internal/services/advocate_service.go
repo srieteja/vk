@@ -158,3 +158,28 @@ func (s *AdvocateService) GetAvailableAdvocates(filter *AdvocateFilter) ([]model
 
 	return advocates, nil
 }
+
+func (s *AdvocateService) GetAdvocateSchedule(advocateID uint, from, to string) ([]models.Call, error) {
+	if advocateID == 0 {
+		return nil, errors.New("invalid advocate ID")
+	}
+
+	query := s.db.Where("receiver_id = ? AND receiver_type = ?", advocateID, "advocate").
+		Where("status IN ?", []string{"scheduled", "accepted", "initiated"})
+
+	// Filter by time range if provided
+	if from != "" {
+		query = query.Where("scheduled_at >= ? OR started_at >= ?", from, from)
+	}
+	if to != "" {
+		query = query.Where("scheduled_at <= ? OR started_at <= ?", to, to)
+	}
+
+	var calls []models.Call
+	if err := query.Order("scheduled_at asc, started_at asc").Find(&calls).Error; err != nil {
+		s.logger.Severe("GetAdvocateSchedule failed: %v", err)
+		return nil, errors.New("failed to fetch schedule")
+	}
+
+	return calls, nil
+}
