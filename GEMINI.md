@@ -1,72 +1,51 @@
-# Project Context: Enterprise Go Backend API
+# Project Context: Enterprise Go Backend API (vk)
 
 ## Overview
-This project is a production-ready backend API built in Go, designed for a platform connecting Providers ("Advocates") and Consumers ("Clients"). It features a dual-user authentication system, P2P video calling capabilities, payment processing, and LLM-powered chat functionality.
+A production-ready Go backend connecting Providers ("Advocates") and Consumers ("Clients"). Includes P2P WebRTC signaling, GORM-based accounting, and a resilient LLM router.
 
 ## Tech Stack
-*   **Language:** Go (1.24+)
-*   **Web Framework:** Gin
-*   **Database:** PostgreSQL (via GORM)
-*   **Caching/Rate Limiting:** Redis
-*   **Authentication:** JWT, Google OAuth
-*   **LLM Integration:** OpenAI, Anthropic
-*   **Containerization:** Docker, Docker Compose
+*   **Core:** Go 1.24+, Gin (Web Framework), GORM (PostgreSQL)
+*   **Auth:** JWT (Sessions), Google OAuth2
+*   **Infrastructure:** Redis (LLM Cache/Rate Limit), Docker
+*   **Communication:** WebRTC (Signaling + STUN/TURN tokenization)
+*   **AI:** Custom Provider (Ollama/vLLM) -> Anthropic -> OpenAI
 
-## Architecture
-The project follows a standard layered architecture:
-*   `cmd/main.go`: Application entry point and wiring.
-*   `internal/config`: Configuration management using environment variables.
-*   `internal/database`: Database connection and schema initialization.
-*   `internal/models`: Data structures and database models.
-*   `internal/services`: Business logic implementation.
-*   `internal/middleware`: HTTP middleware (Authentication, Logging).
-*   `internal/llm`: LLM integration service with a provider abstraction.
-*   `internal/logger`: Custom logging package.
+## Critical Domain Nuances (Token Efficiency)
 
-## Key Features & Routes
-*   **Authentication:**
-    *   `/api/auth/advocate/*`: Registration/Login for Advocates.
-    *   `/api/auth/client/*`: Registration/Login for Clients.
-    *   `/api/auth/google/*`: Google OAuth flow.
-*   **User Management:**
-    *   `/api/advocate/*`: Profile, availability, and earnings management.
-    *   `/api/client/*`: Profile management, finding advocates.
-*   **Communication:**
-    *   `/api/calls/*`: WebRTC signaling (initiate, accept, end calls, token generation).
-    *   `/api/llm/chat`: LLM-powered chat interface.
-*   **Payments:**
-    *   `/api/client/payment/*`: Payment initiation and verification.
+### 1. Authentication & OAuth
+*   **GoogleID:** Stored as `*string` (nullable) in `Advocate` and `Client` models. **Reason:** Avoids unique constraint violations for email/password users (who have NULL) vs OAuth users.
+*   **Sessions:** Token-based, stored in `sessions` table, validated via `AuthMiddleware`.
 
-## Development Workflow
+### 2. Accounting & Payments (`PaymentService`)
+*   **Commission:** Default is **20% platform fee** (defined in `config.Config`).
+*   **Verification Logic:** Uses `db.Transaction` to atomically:
+    1. Update payment status to `completed`.
+    2. Increment Advocate `earnings` using `gorm.Expr` (prevents race conditions).
+*   **Idempotency:** `VerifyPayment` checks if status is already `completed` to prevent double-crediting.
 
-### Prerequisites
-*   Go 1.24+
-*   Docker & Docker Compose
-*   PostgreSQL (if not using Docker)
+### 3. LLM Integration (`LLMService`)
+*   **Provider Chain:** `Primary: Custom` (Local/Ollama) -> `Fallback: Anthropic`.
+*   **Resilience:** Implements Circuit Breaker (stops requests on failures) and Rate Limiting (Token Bucket).
+*   **Caching:** Redis-backed caching for identical prompts to save costs/latency.
 
-### Setup
-1.  **Environment:** Copy `.env.example` to `.env` and configure secrets.
-2.  **Dependencies:** Run `go mod download`.
-3.  **Database:** Start the database using `make docker-up` or configure a local instance. Initialize schema using `migrations/init.sql`.
+### 4. Communication (`CallService` / `WebRTCService`)
+*   **Flow:** `Initiate` -> `Accept` -> `Get Token` -> `End`.
+*   **States:** `initiated`, `accepted`, `completed`, `scheduled`.
+*   **Duration:** Calculated at `EndCall` based on `StartedAt` timestamp.
+*   **Scheduling:** `Call` model supports `ScheduledAt` for future appointments. Clients can view advocate schedules via `GetAdvocateSchedule`.
+*   **Signaling:** Implemented via WebSocket (`/api/ws/signal`). Peers authenticate with a WebRTC token and exchange SDP/ICE messages.
 
-### Build & Run
-*   **Run Locally:** `make run` (Starts server on port 8080 by default)
-*   **Build Binary:** `make build`
-*   **Docker:** `make docker-up` (Starts Postgres and Redis) / `make docker-down`
+## Directory Map
+*   `internal/models`: GORM structs (look here for schema).
+*   `internal/services`: Business logic (Accounting, Auth, LLM).
+*   `internal/llm`: AI logic (Circuit breakers, Providers).
+*   `plans/`: Long-term roadmaps (e.g., `model_training.md`).
+*   `tests/unit`: Uses SQLite in-memory (`setup_test.go`).
 
-### Testing
-*   **Run All Tests:** `make test`
-*   **Test Coverage:** `make test-coverage`
+## Key Environment Variables
+*   `CUSTOM_LLM_BASE_URL`: For local model serving (e.g., `http://localhost:11434/v1`).
+*   `PLATFORM_COMMISSION_PERCENTAGE`: Controls accounting math (default 20.0).
 
-## Coding Conventions
-*   **Logging:** Use the `internal/logger` package. Do not use standard `log` or `fmt.Print` for application logging.
-*   **Configuration:** access configuration via `config.LoadConfig()`. Do not hardcode values.
-*   **Error Handling:** Services return errors; Handlers map errors to appropriate HTTP status codes and JSON responses.
-*   **Database:** Use GORM for database interactions. Ensure models are defined in `internal/models`.
-
-## Important Files
-*   `go.mod`: Project dependencies.
-*   `Makefile`: Command shortcuts.
-*   `internal/config/config.go`: Environment variable mappings.
-*   `internal/llm/providers/provider.go`: Interface definition for LLM providers.
-*   `docs/API.md`: Detailed API documentation.
+## Testing Patterns
+*   Always use `setupTestDB()` from `setup_test.go` for unit tests.
+*   Verify side effects (e.g., checking DB earnings after payment verification).

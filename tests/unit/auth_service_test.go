@@ -74,3 +74,63 @@ func TestRegisterUserA_InvalidEmail(t *testing.T) {
 		t.Fatalf("expected error for empty email")
 	}
 }
+
+func TestRegisterClient(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewAuthService(db)
+
+	req := &models.RegisterRequest{
+		Email:    "client@test.com",
+		Password: "password123",
+		Name:     "Test Client",
+	}
+
+	client, err := service.RegisterClient(req)
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if client.Email != "client@test.com" {
+		t.Errorf("expected email client@test.com, got %s", client.Email)
+	}
+}
+
+func TestLoginClient(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewAuthService(db)
+
+	req := &models.RegisterRequest{
+		Email:    "client@test.com",
+		Password: "password123",
+		Name:     "Test Client",
+	}
+	service.RegisterClient(req)
+
+	client, err := service.LoginClient("client@test.com", "password123")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if client.Email != "client@test.com" {
+		t.Errorf("expected email client@test.com, got %s", client.Email)
+	}
+}
+
+func TestCreateSession(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewAuthService(db)
+
+	session, err := service.CreateSession(1, "advocate")
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if session.Token == "" {
+		t.Error("expected token to be generated")
+	}
+
+	if session.UserID != 1 {
+		t.Errorf("expected user ID 1, got %d", session.UserID)
+	}
+}
