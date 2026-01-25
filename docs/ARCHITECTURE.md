@@ -20,10 +20,14 @@ This project follows a standard **Layered Architecture** (Controller-Service-Rep
 *   **OAuth Strategy:** Google OAuth flow via `internal/services/oauth_service.go`.
     *   Uses `google_id` (nullable) to link accounts.
     *   Auto-creates accounts if they don't exist.
-*   **Session Management:** Token-based sessions stored in `sessions` table.
+    *   State is HMAC-signed and time-limited (`OAUTH_STATE_SECRET`, `OAUTH_STATE_TTL_SECONDS`).
+*   **Session Management:** Opaque session tokens stored in `sessions` table (not JWTs).
 
 ### 2. Communication (WebRTC)
 *   **Signaling:** REST endpoints (`/api/calls/*`) handle call initiation, acceptance, and ending.
+*   **WebSocket Signaling:** `/api/ws/signal` fans out SDP/ICE messages to peers.
+    *   Clients authenticate using WebRTC tokens from `/api/calls/token`.
+    *   Origin checks are enforced via `WEBSOCKET_ALLOWED_ORIGINS` (default: same-host).
 *   **ICE Servers:** Generates tokens for TURN/STUN usage.
 
 ### 3. LLM Integration (`internal/llm`)
@@ -40,6 +44,13 @@ A robust, fault-tolerant AI service designed for production.
 ### 4. Payments
 *   Tracks transactions between Clients and Advocates.
 *   Calculates platform fees and advocate earnings.
+
+### 5. Scalability & Observability
+*   **Session Store:** Redis-backed or hybrid session storage via `SESSION_STORE_MODE`.
+*   **Signaling Pub/Sub:** Redis fan-out for WebSocket signaling across instances.
+*   **Outbox:** Persistent outbox events with a dedicated worker (`cmd/worker`).
+*   **Idempotency:** `Idempotency-Key` support for safe retries on write endpoints.
+*   **Telemetry:** Prometheus metrics at `/metrics` and optional OpenTelemetry tracing.
 
 ## Data Flow
 `Request` -> `Middleware` -> `Handler` -> `Service` -> `Repository/DB`

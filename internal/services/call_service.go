@@ -1,24 +1,29 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
+	"vk_backend/internal/outbox"
 
 	"gorm.io/gorm"
 )
 
 type CallService struct {
-	db     *gorm.DB
-	logger *logger.Logger
+	db            *gorm.DB
+	outboxService *outbox.Service
+	logger        *logger.Logger
 }
 
-func NewCallService(db *gorm.DB) *CallService {
+func NewCallService(db *gorm.DB, outboxService *outbox.Service) *CallService {
 	return &CallService{
-		db:     db,
-		logger: logger.NewLogger("CallService", logger.INFO),
+		db:            db,
+		outboxService: outboxService,
+		logger:        logger.NewLogger("CallService", logger.INFO),
 	}
 }
 
@@ -42,6 +47,17 @@ func (s *CallService) InitiateCall(callerID uint, callerType string, receiverID 
 	if err := s.db.Create(call).Error; err != nil {
 		s.logger.Severe("InitiateCall failed: database error: %v", err)
 		return nil, errors.New("failed to create call")
+	}
+
+	if s.outboxService != nil {
+		_ = s.outboxService.Enqueue(context.Background(), "call", fmt.Sprintf("%d", call.ID), "call.initiated", map[string]interface{}{
+			"call_id":       call.ID,
+			"caller_id":     call.CallerID,
+			"caller_type":   call.CallerType,
+			"receiver_id":   call.ReceiverID,
+			"receiver_type": call.ReceiverType,
+			"status":        call.Status,
+		})
 	}
 
 	s.logger.Info("Call initiated successfully: ID=%d, CallerID=%d, ReceiverID=%d", call.ID, call.CallerID, call.ReceiverID)
@@ -85,6 +101,13 @@ func (s *CallService) AcceptCall(callID uint, userID uint) (*models.Call, error)
 	if err := s.db.Save(&call).Error; err != nil {
 		s.logger.Severe("AcceptCall failed: failed to update call: %v", err)
 		return nil, errors.New("failed to update call")
+	}
+
+	if s.outboxService != nil {
+		_ = s.outboxService.Enqueue(context.Background(), "call", fmt.Sprintf("%d", call.ID), "call.accepted", map[string]interface{}{
+			"call_id": call.ID,
+			"status":  call.Status,
+		})
 	}
 
 	s.logger.Info("Call accepted successfully: ID=%d, ReceiverID=%d", call.ID, call.ReceiverID)
@@ -132,6 +155,16 @@ func (s *CallService) EndCall(callID uint, userID uint) (*models.Call, error) {
 	if err := s.db.Save(&call).Error; err != nil {
 		s.logger.Severe("EndCall failed: failed to update call: %v", err)
 		return nil, errors.New("failed to update call")
+	}
+
+	if s.outboxService != nil {
+		_ = s.outboxService.Enqueue(context.Background(), "call", fmt.Sprintf("%d", call.ID), "call.completed", map[string]interface{}{
+			"call_id":    call.ID,
+			"status":     call.Status,
+			"duration":   call.Duration,
+			"ended_at":   call.EndedAt,
+			"started_at": call.StartedAt,
+		})
 	}
 
 	s.logger.Info("Call ended successfully: ID=%d, Duration=%d seconds", call.ID, call.Duration)

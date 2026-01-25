@@ -16,7 +16,7 @@ func TestSignalingFlow(t *testing.T) {
 	db := setupTestDB()
 	secret := "test-secret"
 	webrtcService := services.NewWebRTCService(db, secret)
-	signalingService := services.NewSignalingService(webrtcService)
+	signalingService := services.NewSignalingService(webrtcService, nil, nil)
 
 	// Setup Test Server
 	s := httptest.NewServer(http.HandlerFunc(signalingService.HandleWebSocket))
@@ -33,15 +33,22 @@ func TestSignalingFlow(t *testing.T) {
 		CallerType:   "client",
 		ReceiverType: "advocate",
 	}
-	db.Create(&call)
-	token, _ := webrtcService.GenerateToken(call.ID, 1)
+	if err := db.Create(&call).Error; err != nil {
+		t.Fatalf("failed to create call: %v", err)
+	}
+	token, err := webrtcService.GenerateToken(call.ID, 1)
+	if err != nil {
+		t.Fatalf("failed to generate token: %v", err)
+	}
 
 	// Connect Peer A
 	peerA, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("Peer A failed to connect: %v", err)
 	}
-	defer peerA.Close()
+	defer func() {
+		_ = peerA.Close()
+	}()
 
 	// Authenticate Peer A
 	if err := peerA.WriteJSON(map[string]string{"token": token}); err != nil {
@@ -53,7 +60,9 @@ func TestSignalingFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Peer B failed to connect: %v", err)
 	}
-	defer peerB.Close()
+	defer func() {
+		_ = peerB.Close()
+	}()
 
 	// Authenticate Peer B (Using same token for simplicity, usually would be distinct)
 	// In real world, Peer B would have their own token for the same Call ID
@@ -78,5 +87,31 @@ func TestSignalingFlow(t *testing.T) {
 
 	if receivedMsg.Type != "offer" {
 		t.Errorf("expected type 'offer', got %s", receivedMsg.Type)
+	}
+}
+
+func TestSignalingRejectsDisallowedOrigin(t *testing.T) {
+	db := setupTestDB()
+	secret := "test-secret"
+	webrtcService := services.NewWebRTCService(db, secret)
+	signalingService := services.NewSignalingService(webrtcService, []string{"http://allowed.example"}, nil)
+
+	server := httptest.NewServer(http.HandlerFunc(signalingService.HandleWebSocket))
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http")
+	headers := http.Header{}
+	headers.Set("Origin", "http://evil.example")
+
+	dialer := websocket.Dialer{}
+	conn, resp, err := dialer.Dial(wsURL, headers)
+	if err == nil {
+		if conn != nil {
+			_ = conn.Close()
+		}
+		t.Fatal("expected connection to be rejected for disallowed origin")
+	}
+	if resp != nil {
+		_ = resp.Body.Close()
 	}
 }

@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -9,21 +10,24 @@ import (
 	"vk_backend/internal/config"
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
+	"vk_backend/internal/outbox"
 
 	"gorm.io/gorm"
 )
 
 type PaymentService struct {
-	db     *gorm.DB
-	cfg    *config.Config
-	logger *logger.Logger
+	db            *gorm.DB
+	cfg           *config.Config
+	outboxService *outbox.Service
+	logger        *logger.Logger
 }
 
-func NewPaymentService(db *gorm.DB, cfg *config.Config) *PaymentService {
+func NewPaymentService(db *gorm.DB, cfg *config.Config, outboxService *outbox.Service) *PaymentService {
 	return &PaymentService{
-		db:     db,
-		cfg:    cfg,
-		logger: logger.NewLogger("PaymentService", logger.INFO),
+		db:            db,
+		cfg:           cfg,
+		outboxService: outboxService,
+		logger:        logger.NewLogger("PaymentService", logger.INFO),
 	}
 }
 
@@ -48,19 +52,28 @@ func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float
 	txnID := fmt.Sprintf("txn_%s", hex.EncodeToString(b))
 
 	payment := &models.Payment{
-		ClientID:        clientID,
-		AdvocateID:      advocateID,
-		Amount:          amount,
-		Status:          "pending",
-		TransactionID:   txnID,
-		PaymentGateway:  "stripe",
-		UserACommission: advocateCommission,
-		PlatformFee:     platformFee,
+		ClientID:           clientID,
+		AdvocateID:         advocateID,
+		Amount:             amount,
+		Status:             "pending",
+		TransactionID:      txnID,
+		PaymentGateway:     "stripe",
+		AdvocateCommission: advocateCommission,
+		PlatformFee:        platformFee,
 	}
 
 	if err := s.db.Create(payment).Error; err != nil {
 		s.logger.Severe("InitiatePayment failed: database error: %v", err)
 		return nil, errors.New("failed to create payment")
+	}
+
+	if s.outboxService != nil {
+		_ = s.outboxService.Enqueue(context.Background(), "payment", fmt.Sprintf("%d", payment.ID), "payment.initiated", map[string]interface{}{
+			"payment_id":  payment.ID,
+			"client_id":   payment.ClientID,
+			"advocate_id": payment.AdvocateID,
+			"amount":      payment.Amount,
+		})
 	}
 
 	s.logger.Info("Payment initiated successfully: ID=%d, TransactionID=%s, Amount=%.2f", payment.ID, payment.TransactionID, payment.Amount)
@@ -99,7 +112,7 @@ func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
 
 		// Update advocate earnings
 		if err := tx.Model(&models.Advocate{}).Where("id = ?", payment.AdvocateID).
-			UpdateColumn("earnings", gorm.Expr("earnings + ?", payment.UserACommission)).Error; err != nil {
+			UpdateColumn("earnings", gorm.Expr("earnings + ?", payment.AdvocateCommission)).Error; err != nil {
 			return err
 		}
 
@@ -109,6 +122,16 @@ func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
 	if err != nil {
 		s.logger.Severe("VerifyPayment failed: transaction error: %v", err)
 		return nil, errors.New("failed to complete payment")
+	}
+
+	if s.outboxService != nil {
+		_ = s.outboxService.Enqueue(context.Background(), "payment", fmt.Sprintf("%d", payment.ID), "payment.completed", map[string]interface{}{
+			"payment_id":  payment.ID,
+			"client_id":   payment.ClientID,
+			"advocate_id": payment.AdvocateID,
+			"amount":      payment.Amount,
+			"status":      payment.Status,
+		})
 	}
 
 	s.logger.Info("Payment verified successfully: ID=%d, TransactionID=%s", payment.ID, payment.TransactionID)

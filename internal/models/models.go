@@ -62,17 +62,17 @@ func (Call) TableName() string {
 }
 
 type Payment struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	ClientID        uint      `json:"client_id"`
-	AdvocateID      uint      `json:"advocate_id"`
-	Amount          float64   `json:"amount"`
-	Status          string    `json:"status"`
-	TransactionID   string    `gorm:"uniqueIndex" json:"transaction_id"`
-	PaymentGateway  string    `json:"payment_gateway"`
-	UserACommission float64   `json:"advocate_commission"`
-	PlatformFee     float64   `json:"platform_fee"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID                 uint      `gorm:"primaryKey" json:"id"`
+	ClientID           uint      `json:"client_id"`
+	AdvocateID         uint      `json:"advocate_id"`
+	Amount             float64   `json:"amount"`
+	Status             string    `json:"status"`
+	TransactionID      string    `gorm:"uniqueIndex" json:"transaction_id"`
+	PaymentGateway     string    `json:"payment_gateway"`
+	AdvocateCommission float64   `json:"advocate_commission"`
+	PlatformFee        float64   `json:"platform_fee"`
+	CreatedAt          time.Time `json:"created_at"`
+	UpdatedAt          time.Time `json:"updated_at"`
 }
 
 func (Payment) TableName() string {
@@ -90,4 +90,36 @@ type Session struct {
 
 func (Session) TableName() string {
 	return "sessions"
+}
+
+type OutboxEvent struct {
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	AggregateType string     `json:"aggregate_type"`
+	AggregateID   string     `json:"aggregate_id"`
+	EventType     string     `json:"event_type"`
+	Payload       []byte     `gorm:"type:jsonb" json:"payload"`
+	Status        string     `json:"status"`
+	Attempts      int        `json:"attempts"`
+	LastError     string     `json:"last_error,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	ProcessedAt   *time.Time `json:"processed_at,omitempty"`
+}
+
+func (OutboxEvent) TableName() string {
+	return "outbox_events"
+}
+
+type IdempotencyKey struct {
+	Key            string    `gorm:"primaryKey" json:"key"`
+	UserID         uint      `json:"user_id"`
+	UserType       string    `json:"user_type"`
+	RequestHash    string    `json:"request_hash"`
+	ResponseStatus int       `json:"response_status"`
+	ResponseBody   string    `json:"response_body"`
+	CreatedAt      time.Time `json:"created_at"`
+	ExpiresAt      time.Time `json:"expires_at"`
+}
+
+func (IdempotencyKey) TableName() string {
+	return "idempotency_keys"
 }

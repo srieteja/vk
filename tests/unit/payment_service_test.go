@@ -17,7 +17,7 @@ func setupTestConfig() *config.Config {
 func TestInitiatePayment(t *testing.T) {
 	db := setupTestDB()
 	cfg := setupTestConfig()
-	service := services.NewPaymentService(db, cfg)
+	service := services.NewPaymentService(db, cfg, nil)
 
 	// Create test users
 	client := models.Client{Name: "Client", Email: "c@test.com", UUID: "c-uuid", Balance: 100}
@@ -42,8 +42,8 @@ func TestInitiatePayment(t *testing.T) {
 	}
 
 	expectedCommission := amount - expectedFee
-	if payment.UserACommission != expectedCommission {
-		t.Errorf("expected advocate commission %f, got %f", expectedCommission, payment.UserACommission)
+	if payment.AdvocateCommission != expectedCommission {
+		t.Errorf("expected advocate commission %f, got %f", expectedCommission, payment.AdvocateCommission)
 	}
 
 	if payment.Status != "pending" {
@@ -54,7 +54,7 @@ func TestInitiatePayment(t *testing.T) {
 func TestVerifyPayment(t *testing.T) {
 	db := setupTestDB()
 	cfg := setupTestConfig()
-	service := services.NewPaymentService(db, cfg)
+	service := services.NewPaymentService(db, cfg, nil)
 
 	// Create test users
 	client := models.Client{Name: "Client", Email: "c@test.com", UUID: "c-uuid", Balance: 100}
@@ -102,7 +102,7 @@ func TestVerifyPayment(t *testing.T) {
 func TestInitiatePayment_InvalidAmount(t *testing.T) {
 	db := setupTestDB()
 	cfg := setupTestConfig()
-	service := services.NewPaymentService(db, cfg)
+	service := services.NewPaymentService(db, cfg, nil)
 
 	_, err := service.InitiatePayment(1, 2, 0)
 

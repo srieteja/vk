@@ -7,7 +7,7 @@ import (
 
 func TestInitiateCall(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewCallService(db)
+	service := services.NewCallService(db, nil)
 
 	call, err := service.InitiateCall(1, "client", 2, "advocate")
 
@@ -26,7 +26,7 @@ func TestInitiateCall(t *testing.T) {
 
 func TestAcceptCall(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewCallService(db)
+	service := services.NewCallService(db, nil)
 
 	// First initiate a call
 	createdCall, err := service.InitiateCall(1, "client", 2, "advocate")
@@ -48,7 +48,7 @@ func TestAcceptCall(t *testing.T) {
 
 func TestEndCall(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewCallService(db)
+	service := services.NewCallService(db, nil)
 
 	// First initiate
 	createdCall, err := service.InitiateCall(1, "client", 2, "advocate")
@@ -76,7 +76,7 @@ func TestEndCall(t *testing.T) {
 
 func TestGetCall(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewCallService(db)
+	service := services.NewCallService(db, nil)
 
 	createdCall, _ := service.InitiateCall(1, "client", 2, "advocate")
 
@@ -98,7 +98,7 @@ func TestGetCall(t *testing.T) {
 
 func TestAcceptCall_Unauthorized(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewCallService(db)
+	service := services.NewCallService(db, nil)
 
 	createdCall, _ := service.InitiateCall(1, "client", 2, "advocate")
 
@@ -111,11 +111,15 @@ func TestAcceptCall_Unauthorized(t *testing.T) {
 
 func TestEndCall_AlreadyCompleted(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewCallService(db)
+	service := services.NewCallService(db, nil)
 
 	createdCall, _ := service.InitiateCall(1, "client", 2, "advocate")
-	service.AcceptCall(createdCall.ID, 2)
-	service.EndCall(createdCall.ID, 1)
+	if _, err := service.AcceptCall(createdCall.ID, 2); err != nil {
+		t.Fatalf("expected accept call success, got %v", err)
+	}
+	if _, err := service.EndCall(createdCall.ID, 1); err != nil {
+		t.Fatalf("expected end call success, got %v", err)
+	}
 
 	// Try ending again
 	_, err := service.EndCall(createdCall.ID, 1)

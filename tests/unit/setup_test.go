@@ -2,6 +2,8 @@ package unit
 
 import (
 	"vk_backend/internal/models"
+	"vk_backend/internal/sessions"
+
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
@@ -19,10 +21,20 @@ func setupTestDB() *gorm.DB {
 		&models.Call{},
 		&models.Payment{},
 		&models.Session{},
+		&models.OutboxEvent{},
+		&models.IdempotencyKey{},
 	)
 	if err != nil {
 		panic("failed to migrate schema")
 	}
 
 	return db
+}
+
+func setupSessionStore(db *gorm.DB) sessions.Store {
+	store, _, err := sessions.NewStore(db, nil, "db")
+	if err != nil {
+		panic("failed to initialize session store")
+	}
+	return store
 }

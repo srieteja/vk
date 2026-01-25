@@ -1,17 +1,16 @@
 package middleware
 
 import (
+	"errors"
 	"strings"
-	"time"
 
 	"vk_backend/internal/logger"
-	"vk_backend/internal/models"
+	"vk_backend/internal/sessions"
 
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 )
 
-func AuthMiddleware(db *gorm.DB) gin.HandlerFunc {
+func AuthMiddleware(store sessions.Store) gin.HandlerFunc {
 	log := logger.NewLogger("AuthMiddleware", logger.INFO)
 
 	return func(c *gin.Context) {
@@ -36,11 +35,23 @@ func AuthMiddleware(db *gorm.DB) gin.HandlerFunc {
 
 		token := parts[1]
 
+		if store == nil {
+			log.Info("AuthMiddleware: session store not configured")
+			c.JSON(500, gin.H{"error": "session store not configured"})
+			c.Abort()
+			return
+		}
+
 		// Validate session
-		var session models.Session
-		if err := db.Where("token = ? AND expires_at > ?", token, time.Now()).First(&session).Error; err != nil {
-			log.Info("AuthMiddleware: invalid or expired token")
-			c.JSON(401, gin.H{"error": "invalid or expired token"})
+		session, err := store.GetByToken(c.Request.Context(), token)
+		if err != nil {
+			if errors.Is(err, sessions.ErrSessionNotFound) {
+				log.Info("AuthMiddleware: invalid or expired token")
+				c.JSON(401, gin.H{"error": "invalid or expired token"})
+			} else {
+				log.Info("AuthMiddleware: session lookup failed: %v", err)
+				c.JSON(500, gin.H{"error": "session lookup failed"})
+			}
 			c.Abort()
 			return
 		}

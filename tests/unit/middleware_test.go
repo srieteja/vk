@@ -15,6 +15,7 @@ import (
 func TestAuthMiddleware(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	db := setupTestDB()
+	store := setupSessionStore(db)
 
 	// Create a valid session
 	session := models.Session{
@@ -67,7 +68,7 @@ func TestAuthMiddleware(t *testing.T) {
 			}
 
 			// execute middleware
-			handler := middleware.AuthMiddleware(db)
+			handler := middleware.AuthMiddleware(store)
 			handler(c)
 
 			if w.Code != tc.expectedStatus && w.Code != 200 { // 200 means Next() was called

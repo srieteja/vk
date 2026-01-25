@@ -3,46 +3,91 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Config struct {
-	Port               string
-	Environment        string
-	DatabaseURL        string
-	MaxConnections     int
-	JWTSecret          string
-	TokenExpiry        time.Duration
-	PlatformCommission float64
-	UserBRatePerMinute float64
-	LogLevel           string
-	GoogleClientID     string
-	GoogleClientSecret string
-	GoogleRedirectURL  string
-	AnthropicAPIKey    string
-	OpenAIAPIKey       string
-	CustomLLMBaseURL   string
-	CustomLLMModel     string
+	Port                      string
+	Environment               string
+	DatabaseURL               string
+	MaxConnections            int
+	JWTSecret                 string
+	OAuthStateSecret          string
+	OAuthStateTTLSeconds      int
+	WebSocketAllowedOrigins   []string
+	RedisAddr                 string
+	RedisPassword             string
+	RedisDB                   int
+	SessionStoreMode          string
+	RunMigrations             bool
+	AutoMigrate               bool
+	MigrationsDir             string
+	DBMaxOpenConns            int
+	DBMaxIdleConns            int
+	DBConnMaxLifetimeSeconds  int
+	IdempotencyTTLSeconds     int
+	OutboxPollIntervalSeconds int
+	OutboxBatchSize           int
+	OutboxMaxAttempts         int
+	MetricsEnabled            bool
+	OtelServiceName           string
+	OtelExporterEndpoint      string
+	OtelExporterInsecure      bool
+	TokenExpiry               time.Duration
+	PlatformCommission        float64
+	UserBRatePerMinute        float64
+	LogLevel                  string
+	GoogleClientID            string
+	GoogleClientSecret        string
+	GoogleRedirectURL         string
+	AnthropicAPIKey           string
+	OpenAIAPIKey              string
+	CustomLLMBaseURL          string
+	CustomLLMModel            string
 }
 
 func LoadConfig() *Config {
+	jwtSecret := getEnv("JWT_SECRET", "secret")
+	maxConnections := getEnvInt("DB_MAX_CONNECTIONS", 25)
 	return &Config{
-		Port:               getEnv("PORT", "8080"),
-		Environment:        getEnv("ENVIRONMENT", "development"),
-		DatabaseURL:        getEnv("DATABASE_URL", "postgres://srie:qwerty@localhost:5432/vk_db"),
-		MaxConnections:     getEnvInt("DB_MAX_CONNECTIONS", 25),
-		JWTSecret:          getEnv("JWT_SECRET", "secret"),
-		TokenExpiry:        time.Duration(getEnvInt("TOKEN_EXPIRY", 86400)) * time.Second,
-		PlatformCommission: getEnvFloat("PLATFORM_COMMISSION_PERCENTAGE", 20.0),
-		UserBRatePerMinute: getEnvFloat("USERB_RATE_PER_MINUTE", 5.0),
-		LogLevel:           getEnv("LOG_LEVEL", "INFO"),
-		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
-		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
-		GoogleRedirectURL:  getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
-		AnthropicAPIKey:    getEnv("ANTHROPIC_API_KEY", ""),
-		OpenAIAPIKey:       getEnv("OPENAI_API_KEY", ""),
-		CustomLLMBaseURL:   getEnv("CUSTOM_LLM_BASE_URL", "http://localhost:11434/v1"), // Default to Ollama
-		CustomLLMModel:     getEnv("CUSTOM_LLM_MODEL", "llama3"),
+		Port:                      getEnv("PORT", "8080"),
+		Environment:               getEnv("ENVIRONMENT", "development"),
+		DatabaseURL:               getEnv("DATABASE_URL", "postgres://srie:qwerty@localhost:5432/vk_db"),
+		MaxConnections:            maxConnections,
+		JWTSecret:                 jwtSecret,
+		OAuthStateSecret:          getEnv("OAUTH_STATE_SECRET", jwtSecret),
+		OAuthStateTTLSeconds:      getEnvInt("OAUTH_STATE_TTL_SECONDS", 600),
+		WebSocketAllowedOrigins:   getEnvCSV("WEBSOCKET_ALLOWED_ORIGINS", ""),
+		RedisAddr:                 getEnv("REDIS_ADDR", "localhost:6379"),
+		RedisPassword:             getEnv("REDIS_PASSWORD", ""),
+		RedisDB:                   getEnvInt("REDIS_DB", 0),
+		SessionStoreMode:          getEnv("SESSION_STORE_MODE", "hybrid"),
+		RunMigrations:             getEnvBool("RUN_MIGRATIONS", true),
+		AutoMigrate:               getEnvBool("AUTO_MIGRATE", true),
+		MigrationsDir:             getEnv("MIGRATIONS_DIR", "migrations"),
+		DBMaxOpenConns:            getEnvInt("DB_MAX_OPEN_CONNS", maxConnections),
+		DBMaxIdleConns:            getEnvInt("DB_MAX_IDLE_CONNS", maxConnections),
+		DBConnMaxLifetimeSeconds:  getEnvInt("DB_CONN_MAX_LIFETIME_SECONDS", 300),
+		IdempotencyTTLSeconds:     getEnvInt("IDEMPOTENCY_TTL_SECONDS", 86400),
+		OutboxPollIntervalSeconds: getEnvInt("OUTBOX_POLL_INTERVAL_SECONDS", 5),
+		OutboxBatchSize:           getEnvInt("OUTBOX_BATCH_SIZE", 10),
+		OutboxMaxAttempts:         getEnvInt("OUTBOX_MAX_ATTEMPTS", 5),
+		MetricsEnabled:            getEnvBool("METRICS_ENABLED", true),
+		OtelServiceName:           getEnv("OTEL_SERVICE_NAME", "vk_backend"),
+		OtelExporterEndpoint:      getEnv("OTEL_EXPORTER_OTLP_ENDPOINT", ""),
+		OtelExporterInsecure:      getEnvBool("OTEL_EXPORTER_OTLP_INSECURE", true),
+		TokenExpiry:               time.Duration(getEnvInt("TOKEN_EXPIRY", 86400)) * time.Second,
+		PlatformCommission:        getEnvFloat("PLATFORM_COMMISSION_PERCENTAGE", 20.0),
+		UserBRatePerMinute:        getEnvFloat("USERB_RATE_PER_MINUTE", 5.0),
+		LogLevel:                  getEnv("LOG_LEVEL", "INFO"),
+		GoogleClientID:            getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret:        getEnv("GOOGLE_CLIENT_SECRET", ""),
+		GoogleRedirectURL:         getEnv("GOOGLE_REDIRECT_URL", "http://localhost:8080/api/auth/google/callback"),
+		AnthropicAPIKey:           getEnv("ANTHROPIC_API_KEY", ""),
+		OpenAIAPIKey:              getEnv("OPENAI_API_KEY", ""),
+		CustomLLMBaseURL:          getEnv("CUSTOM_LLM_BASE_URL", "http://localhost:11434/v1"), // Default to Ollama
+		CustomLLMModel:            getEnv("CUSTOM_LLM_MODEL", "llama3"),
 	}
 }
 
@@ -69,4 +114,32 @@ func getEnvFloat(key string, def float64) float64 {
 		}
 	}
 	return def
+}
+
+func getEnvBool(key string, def bool) bool {
+	if v := os.Getenv(key); v != "" {
+		if parsed, err := strconv.ParseBool(v); err == nil {
+			return parsed
+		}
+	}
+	return def
+}
+
+func getEnvCSV(key string, def string) []string {
+	value := os.Getenv(key)
+	if value == "" {
+		value = def
+	}
+	if value == "" {
+		return nil
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	return out
 }

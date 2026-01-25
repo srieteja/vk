@@ -1,6 +1,7 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -9,6 +10,7 @@ import (
 
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
+	"vk_backend/internal/sessions"
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -16,14 +18,16 @@ import (
 )
 
 type AuthService struct {
-	db     *gorm.DB
-	logger *logger.Logger
+	db           *gorm.DB
+	sessionStore sessions.Store
+	logger       *logger.Logger
 }
 
-func NewAuthService(db *gorm.DB) *AuthService {
+func NewAuthService(db *gorm.DB, sessionStore sessions.Store) *AuthService {
 	return &AuthService{
-		db:     db,
-		logger: logger.NewLogger("AuthService", logger.INFO),
+		db:           db,
+		sessionStore: sessionStore,
+		logger:       logger.NewLogger("AuthService", logger.INFO),
 	}
 }
 
@@ -203,8 +207,13 @@ func (s *AuthService) CreateSession(userID uint, userType string) (*models.Sessi
 		ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hour expiry
 	}
 
-	if err := s.db.Create(session).Error; err != nil {
-		s.logger.Severe("CreateSession failed: database error: %v", err)
+	if s.sessionStore == nil {
+		s.logger.Severe("CreateSession failed: session store is not configured")
+		return nil, errors.New("failed to create session")
+	}
+
+	if err := s.sessionStore.Create(context.Background(), session); err != nil {
+		s.logger.Severe("CreateSession failed: session store error: %v", err)
 		return nil, errors.New("failed to create session")
 	}
 

@@ -12,18 +12,26 @@ import (
 
 	"vk_backend/internal/config"
 	"vk_backend/internal/database"
+	"vk_backend/internal/idempotency"
+	"vk_backend/internal/infra"
 	"vk_backend/internal/logger"
+	"vk_backend/internal/metrics"
 	"vk_backend/internal/middleware"
 	"vk_backend/internal/models"
+	"vk_backend/internal/observability"
+	"vk_backend/internal/outbox"
 	"vk_backend/internal/services"
+	"vk_backend/internal/sessions"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
 func main() {
 	// Load environment variables
-	godotenv.Load()
+	envErr := godotenv.Load()
 
 	cfg := config.LoadConfig()
 
@@ -31,6 +39,9 @@ func main() {
 	logPriority := logger.ParsePriority(cfg.LogLevel)
 	logger.Init("vk_backend", logPriority)
 	log := logger.GetLogger()
+	if envErr != nil {
+		log.Info("Failed to load .env: %v", envErr)
+	}
 
 	log.Info("Initializing vk_backend service")
 	log.Finer("Environment: %s, Log Level: %s", cfg.Environment, cfg.LogLevel)
@@ -38,6 +49,31 @@ func main() {
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 		log.Finer("Gin mode set to ReleaseMode")
+
+		if cfg.JWTSecret == "" || cfg.JWTSecret == "secret" {
+			log.Severe("JWT_SECRET must be set in production")
+			os.Exit(1)
+		}
+		if cfg.OAuthStateSecret == "" || cfg.OAuthStateSecret == "secret" {
+			log.Severe("OAUTH_STATE_SECRET must be set in production")
+			os.Exit(1)
+		}
+		if cfg.AutoMigrate {
+			log.Info("AUTO_MIGRATE disabled in production")
+			cfg.AutoMigrate = false
+		}
+	}
+
+	shutdownTracing, tracingEnabled, err := observability.SetupTracing(context.Background(), cfg)
+	if err != nil {
+		log.Info("Tracing setup failed: %v", err)
+	}
+	if tracingEnabled {
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			_ = shutdownTracing(ctx)
+		}()
 	}
 
 	// Initialize DB
@@ -49,6 +85,15 @@ func main() {
 	}
 	log.Info("Database connection established")
 
+	if cfg.RunMigrations {
+		log.Finer("Applying database migrations...")
+		if err := database.ApplyMigrations(db, cfg.MigrationsDir); err != nil {
+			log.Severe("Failed to apply migrations: %v", err)
+			os.Exit(1)
+		}
+		log.Info("Database migrations applied")
+	}
+
 	// Initialize LLM service
 	log.Info("Initializing LLM service...")
 	llmService := services.NewLLMService(db)
@@ -56,15 +101,45 @@ func main() {
 	log.Info("LLM service initialized")
 
 	// Initialize database schema
-	log.Finer("Initializing database schema...")
-	if err := database.InitSchema(db); err != nil {
-		log.Severe("Failed to initialize schema: %v", err)
+	if cfg.AutoMigrate {
+		log.Finer("Initializing database schema...")
+		if err := database.InitSchema(db); err != nil {
+			log.Severe("Failed to initialize schema: %v", err)
+			os.Exit(1)
+		}
+		log.Info("Database schema initialized")
+	}
+
+	redisClient, err := infra.NewRedisClient(cfg)
+	if err != nil {
+		log.Info("Redis unavailable: %v", err)
+		redisClient = nil
+	}
+
+	sessionStore, sessionMode, err := sessions.NewStore(db, redisClient, cfg.SessionStoreMode)
+	if err != nil {
+		log.Severe("Failed to initialize session store: %v", err)
 		os.Exit(1)
 	}
-	log.Info("Database schema initialized")
+	if sessionMode != cfg.SessionStoreMode {
+		log.Info("Session store fallback to %s", sessionMode)
+	}
+
+	outboxService := outbox.NewService(db)
+	idempotencyStore := idempotency.NewStore(db)
+	idempotencyTTL := time.Duration(cfg.IdempotencyTTLSeconds) * time.Second
 
 	// Gin router
 	router := gin.Default()
+	router.Use(middleware.RequestIDMiddleware())
+	if tracingEnabled {
+		router.Use(otelgin.Middleware(cfg.OtelServiceName))
+	}
+	if cfg.MetricsEnabled {
+		metrics.Init()
+		router.Use(middleware.MetricsMiddleware())
+		router.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	}
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -73,16 +148,16 @@ func main() {
 	})
 
 	// Initialize services
-	authService := services.NewAuthService(db)
+	authService := services.NewAuthService(db, sessionStore)
 	oauthService := services.NewOAuthService(db, cfg, authService)
 	advocateService := services.NewAdvocateService(db)
-	callService := services.NewCallService(db)
-	paymentService := services.NewPaymentService(db, cfg)
+	callService := services.NewCallService(db, outboxService)
+	paymentService := services.NewPaymentService(db, cfg, outboxService)
 	webrtcService := services.NewWebRTCService(db, cfg.JWTSecret)
-	signalingService := services.NewSignalingService(webrtcService)
+	signalingService := services.NewSignalingService(webrtcService, cfg.WebSocketAllowedOrigins, redisClient)
 
 	// Initialize middleware
-	authMiddleware := middleware.AuthMiddleware(db)
+	authMiddleware := middleware.AuthMiddleware(sessionStore)
 
 	// API routes
 	api := router.Group("/api")
@@ -255,12 +330,20 @@ func main() {
 			// ---------------------------
 			auth.GET("/google/advocate", func(c *gin.Context) {
 				state := oauthService.GenerateState("advocate")
+				if state == "" {
+					c.JSON(500, gin.H{"error": "failed to generate oauth state"})
+					return
+				}
 				url := oauthService.GetAuthURL(state)
 				c.Redirect(http.StatusTemporaryRedirect, url)
 			})
 
 			auth.GET("/google/client", func(c *gin.Context) {
 				state := oauthService.GenerateState("client")
+				if state == "" {
+					c.JSON(500, gin.H{"error": "failed to generate oauth state"})
+					return
+				}
 				url := oauthService.GetAuthURL(state)
 				c.Redirect(http.StatusTemporaryRedirect, url)
 			})
@@ -274,14 +357,14 @@ func main() {
 					return
 				}
 
-				// Extract user type from state
-				var userType string
-				if strings.HasPrefix(state, "advocate_") {
-					userType = "advocate"
-				} else if strings.HasPrefix(state, "client_") {
-					userType = "client"
-				} else {
+				userType, err := oauthService.ValidateState(state)
+				if err != nil {
 					c.JSON(400, gin.H{"error": "invalid state"})
+					return
+				}
+
+				if userType != "advocate" && userType != "client" {
+					c.JSON(400, gin.H{"error": "invalid user type"})
 					return
 				}
 
@@ -529,6 +612,7 @@ func main() {
 
 			payment := client.Group("/payment")
 			{
+				payment.Use(middleware.IdempotencyMiddleware(idempotencyStore, idempotencyTTL))
 				payment.POST("/initiate", func(c *gin.Context) {
 					userID, _ := c.Get("user_id")
 					userType, _ := c.Get("user_type")

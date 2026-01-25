@@ -3,15 +3,15 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"log"
+	"net/http"
+	"time"
 	"vk_backend/internal/config"
 	"vk_backend/internal/llm"
 	"vk_backend/internal/llm/cache"
 	"vk_backend/internal/llm/circuit"
 	"vk_backend/internal/llm/providers"
 	"vk_backend/internal/llm/ratelimit"
-	"log"
-	"net/http"
-	"time"
 
 	"gorm.io/gorm"
 )
@@ -30,9 +30,14 @@ func NewLLMService(db *gorm.DB) *LLMService {
 
 func (s *LLMService) Start(cfg *config.Config) {
 	// Initialize cache
-	redisCache, err := cache.NewRedisCache("localhost:6379")
-	if err != nil {
-		log.Printf("Warning: Redis cache unavailable: %v", err)
+	var redisCache *cache.RedisCache
+	if cfg.RedisAddr != "" {
+		cacheInstance, err := cache.NewRedisCache(cfg.RedisAddr)
+		if err != nil {
+			log.Printf("Warning: Redis cache unavailable: %v", err)
+		} else {
+			redisCache = cacheInstance
+		}
 	}
 
 	// Initialize providers

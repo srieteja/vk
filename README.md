@@ -5,17 +5,15 @@ Production-ready Go backend API with dual user system, video calling, and paymen
 ## Quick Start
 
 ```bash
-python3 generate_project.py  # Generate complete project
-cd vk_backend
 cp .env.example .env
 go mod download
-docker-compose up -d postgres
-sleep 5
-psql -U enterprise_user -d enterprise_db -h localhost < migrations/init.sql
-go run cmd/main.go
+make docker-up
+make run
 ```
 
 Server: http://localhost:8080
+
+Postgres runs `migrations/init.sql` automatically on first boot (empty volume).
 
 ## Features
 
@@ -31,6 +29,7 @@ Server: http://localhost:8080
 
 ```bash
 make run               # Start server
+make worker            # Run outbox worker
 make test              # Run tests
 make test-coverage     # Coverage
 make docker-up         # Start Docker

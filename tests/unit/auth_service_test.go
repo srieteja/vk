@@ -9,7 +9,7 @@ import (
 
 func TestRegisterUserA(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewAuthService(db)
+	service := services.NewAuthService(db, setupSessionStore(db))
 
 	req := &models.RegisterRequest{
 		Email:    "test@example.com",
@@ -34,7 +34,7 @@ func TestRegisterUserA(t *testing.T) {
 
 func TestLoginUserA(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewAuthService(db)
+	service := services.NewAuthService(db, setupSessionStore(db))
 
 	// Need to register first
 	req := &models.RegisterRequest{
@@ -60,7 +60,7 @@ func TestLoginUserA(t *testing.T) {
 
 func TestRegisterUserA_InvalidEmail(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewAuthService(db)
+	service := services.NewAuthService(db, setupSessionStore(db))
 
 	req := &models.RegisterRequest{
 		Email:    "",
@@ -77,7 +77,7 @@ func TestRegisterUserA_InvalidEmail(t *testing.T) {
 
 func TestRegisterClient(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewAuthService(db)
+	service := services.NewAuthService(db, setupSessionStore(db))
 
 	req := &models.RegisterRequest{
 		Email:    "client@test.com",
@@ -98,14 +98,16 @@ func TestRegisterClient(t *testing.T) {
 
 func TestLoginClient(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewAuthService(db)
+	service := services.NewAuthService(db, setupSessionStore(db))
 
 	req := &models.RegisterRequest{
 		Email:    "client@test.com",
 		Password: "password123",
 		Name:     "Test Client",
 	}
-	service.RegisterClient(req)
+	if _, err := service.RegisterClient(req); err != nil {
+		t.Fatalf("expected no error registering client, got %v", err)
+	}
 
 	client, err := service.LoginClient("client@test.com", "password123")
 	if err != nil {
@@ -119,7 +121,7 @@ func TestLoginClient(t *testing.T) {
 
 func TestCreateSession(t *testing.T) {
 	db := setupTestDB()
-	service := services.NewAuthService(db)
+	service := services.NewAuthService(db, setupSessionStore(db))
 
 	session, err := service.CreateSession(1, "advocate")
 	if err != nil {

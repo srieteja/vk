@@ -3,12 +3,13 @@
 ## Quick Start
 
 1.  **Prerequisites:** Ensure Go 1.24+ and Docker are installed.
-2.  **Clone & Enter:** `cd vk_backend`
-3.  **Config:** `cp .env.example .env` and fill in your API keys (Google, Anthropic, etc.).
+2.  **Clone & Enter:** `cd <repo-root>`
+3.  **Config:** `cp .env.example .env` and fill in your API keys (Google, Anthropic, etc.). Set `WEBSOCKET_ALLOWED_ORIGINS` to your frontend origin and set `OAUTH_STATE_SECRET`.
 4.  **Dependencies:** `go mod download`
 5.  **Infrastructure:** `make docker-up` (Starts Postgres & Redis)
-6.  **Database:** `cat migrations/init.sql | docker exec -i enterprise-postgres psql -U enterprise_user -d enterprise_db` (Or run manually if using local DB)
+6.  **Database:** Postgres runs `migrations/init.sql` automatically on first boot. If you need to re-run, use `docker-compose down -v` or execute the SQL manually.
 7.  **Run:** `make run`
+8.  **Optional Worker:** `make worker` (processes outbox events)
 
 Server will be running at: http://localhost:8080
 

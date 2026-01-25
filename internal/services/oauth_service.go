@@ -2,9 +2,14 @@ package services
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"vk_backend/internal/config"
 	"vk_backend/internal/logger"
@@ -21,6 +26,15 @@ type OAuthService struct {
 	logger      *logger.Logger
 	oauthConfig *oauth2.Config
 	authService *AuthService
+	stateSecret string
+	stateTTL    time.Duration
+}
+
+type oauthState struct {
+	UserType  string `json:"user_type"`
+	Nonce     string `json:"nonce"`
+	IssuedAt  int64  `json:"iat"`
+	ExpiresAt int64  `json:"exp"`
 }
 
 func NewOAuthService(db *gorm.DB, cfg *config.Config, authService *AuthService) *OAuthService {
@@ -40,6 +54,8 @@ func NewOAuthService(db *gorm.DB, cfg *config.Config, authService *AuthService) 
 		logger:      logger.NewLogger("OAuthService", logger.INFO),
 		oauthConfig: oauthConfig,
 		authService: authService,
+		stateSecret: cfg.OAuthStateSecret,
+		stateTTL:    time.Duration(cfg.OAuthStateTTLSeconds) * time.Second,
 	}
 }
 
@@ -64,7 +80,9 @@ func (s *OAuthService) HandleCallback(code string, userType string) (*models.Ses
 		s.logger.Severe("Failed to get user info: %v", err)
 		return nil, errors.New("failed to get user info")
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	var userInfo struct {
 		ID      string `json:"id"`
@@ -208,7 +226,61 @@ func (s *OAuthService) findOrCreateClient(userInfo struct {
 }
 
 func (s *OAuthService) GenerateState(userType string) string {
-	// Generate a simple state token (in production, use a more secure method)
-	return fmt.Sprintf("%s_%s", userType, uuid.New().String())
+	if s.stateTTL <= 0 {
+		s.stateTTL = 10 * time.Minute
+	}
+	payload := oauthState{
+		UserType:  userType,
+		Nonce:     uuid.New().String(),
+		IssuedAt:  time.Now().Unix(),
+		ExpiresAt: time.Now().Add(s.stateTTL).Unix(),
+	}
+
+	data, err := json.Marshal(payload)
+	if err != nil {
+		s.logger.Severe("Failed to marshal OAuth state: %v", err)
+		return ""
+	}
+
+	signature := s.signState(data)
+	encoded := base64.RawURLEncoding.EncodeToString(data)
+	return fmt.Sprintf("%s.%s", encoded, signature)
 }
 
+func (s *OAuthService) ValidateState(state string) (string, error) {
+	parts := strings.Split(state, ".")
+	if len(parts) != 2 {
+		return "", errors.New("invalid state format")
+	}
+
+	data, err := base64.RawURLEncoding.DecodeString(parts[0])
+	if err != nil {
+		return "", errors.New("invalid state encoding")
+	}
+
+	expectedSig := s.signState(data)
+	if !hmac.Equal([]byte(parts[1]), []byte(expectedSig)) {
+		return "", errors.New("invalid state signature")
+	}
+
+	var payload oauthState
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return "", errors.New("invalid state payload")
+	}
+
+	if payload.UserType == "" || payload.ExpiresAt == 0 || payload.IssuedAt == 0 {
+		return "", errors.New("invalid state payload")
+	}
+
+	if time.Now().Unix() > payload.ExpiresAt {
+		return "", errors.New("state expired")
+	}
+
+	return payload.UserType, nil
+}
+
+func (s *OAuthService) signState(data []byte) string {
+	mac := hmac.New(sha256.New, []byte(s.stateSecret))
+	mac.Write(data)
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
