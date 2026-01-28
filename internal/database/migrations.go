@@ -20,12 +20,34 @@ func (appliedMigration) TableName() string {
 	return "schema_migrations"
 }
 
+func ensureSchemaMigrationsTable(db *gorm.DB) error {
+	// Try to create the table using raw SQL to have full control
+	sql := `
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			name VARCHAR(255) PRIMARY KEY,
+			applied_at TIMESTAMP NOT NULL
+		)
+	`
+	if err := db.Exec(sql).Error; err != nil {
+		return err
+	}
+
+	// Verify the table structure by querying it
+	var count int64
+	if err := db.Table("schema_migrations").Count(&count).Error; err != nil {
+		return fmt.Errorf("failed to verify schema_migrations table: %w", err)
+	}
+
+	return nil
+}
+
 func ApplyMigrations(db *gorm.DB, dir string) error {
 	if dir == "" {
 		return fmt.Errorf("migrations dir is empty")
 	}
 
-	if err := db.AutoMigrate(&appliedMigration{}); err != nil {
+	// Ensure schema_migrations table exists with the correct structure
+	if err := ensureSchemaMigrationsTable(db); err != nil {
 		return fmt.Errorf("failed to prepare schema_migrations: %w", err)
 	}
 
