@@ -94,11 +94,11 @@ CREATE TABLE IF NOT EXISTS idempotency_keys (
     expires_at TIMESTAMP NOT NULL
 );
 
-CREATE INDEX idx_advocates_email ON advocates(email);
-CREATE INDEX idx_clients_email ON clients(email);
-CREATE INDEX idx_calls_caller ON calls(caller_id);
-CREATE INDEX idx_calls_receiver ON calls(receiver_id);
-CREATE INDEX idx_payments_client ON payments(client_id);
-CREATE INDEX idx_payments_advocate ON payments(advocate_id);
-CREATE INDEX idx_outbox_status ON outbox_events(status);
-CREATE INDEX idx_idempotency_expires_at ON idempotency_keys(expires_at);
+CREATE INDEX IF NOT EXISTS idx_advocates_email ON advocates(email);
+CREATE INDEX IF NOT EXISTS idx_clients_email ON clients(email);
+CREATE INDEX IF NOT EXISTS idx_calls_caller ON calls(caller_id);
+CREATE INDEX IF NOT EXISTS idx_calls_receiver ON calls(receiver_id);
+CREATE INDEX IF NOT EXISTS idx_payments_client ON payments(client_id);
+CREATE INDEX IF NOT EXISTS idx_payments_advocate ON payments(advocate_id);
+CREATE INDEX IF NOT EXISTS idx_outbox_status ON outbox_events(status);
+CREATE INDEX IF NOT EXISTS idx_idempotency_expires_at ON idempotency_keys(expires_at);
