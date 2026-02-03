@@ -33,10 +33,15 @@ Decimal phases appear between their surrounding integers in numeric order.
   4. Authorization checks prevent users from accessing or modifying resources they don't own
   5. Request size limits prevent DoS attacks via large payload submissions
 
-**Plans**: TBD
+**Plans**: 6 plans
 
 Plans:
-- [ ] *Plans to be created during phase planning*
+- [ ] 01-01-PLAN.md — Add security dependencies and input validation infrastructure
+- [ ] 01-02-PLAN.md — Fix SQL injection in location filter with wildcard escaping
+- [ ] 01-03-PLAN.md — Implement rate limiting on auth endpoints
+- [ ] 01-04-PLAN.md — Add session revocation mechanism
+- [ ] 01-05-PLAN.md — Implement authorization checks and CORS configuration
+- [ ] 01-06-PLAN.md — Add request size limits, OAuth timing safety, and PII masking
 
 ### Phase 2: Logic & Reliability
 **Goal**: Eliminate race conditions and logic bugs that cause financial inconsistencies or invalid application states
@@ -102,7 +107,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Security Hardening | 0/TBD | Not started | - |
+| 1. Security Hardening | 0/6 | Not started | - |
 | 2. Logic & Reliability | 0/TBD | Not started | - |
 | 3. Testing Foundation | 0/TBD | Not started | - |
 | 4. Architecture & Modularity | 0/TBD | Not started | - |
