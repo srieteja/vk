@@ -109,17 +109,60 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| *(To be filled by roadmapper)* | | |
+| SEC-01 | Phase 1 | Pending |
+| SEC-02 | Phase 1 | Pending |
+| SEC-03 | Phase 1 | Pending |
+| SEC-04 | Phase 1 | Pending |
+| SEC-05 | Phase 1 | Pending |
+| SEC-06 | Phase 1 | Pending |
+| SEC-07 | Phase 1 | Pending |
+| SEC-08 | Phase 1 | Pending |
+| SEC-09 | Phase 1 | Pending |
+| SEC-10 | Phase 1 | Pending |
+| REL-01 | Phase 2 | Pending |
+| REL-02 | Phase 2 | Pending |
+| REL-03 | Phase 2 | Pending |
+| REL-04 | Phase 2 | Pending |
+| REL-05 | Phase 2 | Pending |
+| REL-06 | Phase 2 | Pending |
+| REL-07 | Phase 2 | Pending |
+| REL-08 | Phase 2 | Pending |
+| REL-09 | Phase 2 | Pending |
+| REL-10 | Phase 2 | Pending |
+| TEST-01 | Phase 3 | Pending |
+| TEST-02 | Phase 3 | Pending |
+| TEST-03 | Phase 3 | Pending |
+| TEST-04 | Phase 3 | Pending |
+| TEST-05 | Phase 3 | Pending |
+| TEST-06 | Phase 3 | Pending |
+| TEST-07 | Phase 3 | Pending |
+| TEST-08 | Phase 3 | Pending |
+| TEST-09 | Phase 3 | Pending |
+| TEST-10 | Phase 3 | Pending |
+| TEST-11 | Phase 3 | Pending |
+| TEST-12 | Phase 3 | Pending |
+| TEST-13 | Phase 3 | Pending |
+| TEST-14 | Phase 3 | Pending |
+| TEST-15 | Phase 3 | Pending |
+| ARCH-01 | Phase 4 | Pending |
+| ARCH-02 | Phase 4 | Pending |
+| ARCH-03 | Phase 4 | Pending |
+| ARCH-04 | Phase 4 | Pending |
+| ARCH-05 | Phase 4 | Pending |
+| ARCH-06 | Phase 4 | Pending |
+| ARCH-07 | Phase 4 | Pending |
+| ARCH-08 | Phase 4 | Pending |
+| ARCH-09 | Phase 4 | Pending |
 
 **Coverage:**
 - v1.0 requirements: 44 total
-- Security: 10 requirements
-- Logic & Reliability: 10 requirements
-- Architecture: 9 requirements
-- Testing: 15 requirements
-- Mapped to phases: (pending roadmap creation)
-- Unmapped: 44 ⚠️ (roadmap not yet created)
+- Security: 10 requirements (Phase 1)
+- Logic & Reliability: 10 requirements (Phase 2)
+- Testing: 15 requirements (Phase 3)
+- Architecture: 9 requirements (Phase 4)
+- Mapped to phases: 44/44 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-02-03*
-*Last updated: 2026-02-03 after initial definition*
+*Last updated: 2026-02-03 after roadmap creation*
