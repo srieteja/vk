@@ -1,10 +1,12 @@
 package unit
 
 import (
+	"context"
 	"testing"
 
 	"vk_backend/internal/models"
 	"vk_backend/internal/services"
+	"vk_backend/internal/sessions"
 )
 
 func TestRegisterUserA(t *testing.T) {
@@ -134,5 +136,70 @@ func TestCreateSession(t *testing.T) {
 
 	if session.UserID != 1 {
 		t.Errorf("expected user ID 1, got %d", session.UserID)
+	}
+}
+
+func TestLogoutRevokesSession(t *testing.T) {
+	db := setupTestDB()
+	store := setupSessionStore(db)
+	service := services.NewAuthService(db, store)
+
+	session, err := service.CreateSession(1, "advocate")
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	if _, err := store.GetByToken(context.Background(), session.Token); err != nil {
+		t.Fatalf("session should exist before logout: %v", err)
+	}
+
+	if err := service.Logout(context.Background(), session.Token); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	if _, err := store.GetByToken(context.Background(), session.Token); err != sessions.ErrSessionNotFound {
+		t.Errorf("expected session to be revoked, got err=%v", err)
+	}
+}
+
+func TestLogoutIsIdempotent(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewAuthService(db, setupSessionStore(db))
+
+	if err := service.Logout(context.Background(), "never-existed"); err != nil {
+		t.Errorf("expected logout of unknown token to be a no-op, got %v", err)
+	}
+}
+
+func TestRevokeUserSessionsRemovesAllTokens(t *testing.T) {
+	db := setupTestDB()
+	store := setupSessionStore(db)
+	service := services.NewAuthService(db, store)
+
+	s1, err := service.CreateSession(42, "advocate")
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	s2, err := service.CreateSession(42, "advocate")
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+	other, err := service.CreateSession(99, "client")
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	if err := service.RevokeUserSessions(context.Background(), 42); err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+
+	for _, tok := range []string{s1.Token, s2.Token} {
+		if _, err := store.GetByToken(context.Background(), tok); err != sessions.ErrSessionNotFound {
+			t.Errorf("expected session %q to be revoked, got err=%v", tok, err)
+		}
+	}
+
+	if _, err := store.GetByToken(context.Background(), other.Token); err != nil {
+		t.Errorf("expected unrelated user's session to survive, got err=%v", err)
 	}
 }

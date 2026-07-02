@@ -159,3 +159,24 @@ func TestGetAvailableAdvocates(t *testing.T) {
 		t.Errorf("expected 2 advocates, got %d", len(advocates))
 	}
 }
+
+func TestGetAvailableAdvocatesLocationWildcardNotInjected(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewAdvocateService(db)
+
+	db.Create(&models.Advocate{Name: "A1", Email: "a1@test.com", UUID: "uuid-1", Availability: "available", Location: "NY", HourlyRate: 50})
+	db.Create(&models.Advocate{Name: "A2", Email: "a2@test.com", UUID: "uuid-2", Availability: "available", Location: "CA", HourlyRate: 60})
+
+	// A bare "%" or "_" must be treated as a literal search term, not a
+	// wildcard that matches every row.
+	for _, loc := range []string{"%", "_"} {
+		filter := &services.AdvocateFilter{Availability: "available", Location: loc}
+		advocates, err := service.GetAvailableAdvocates(filter)
+		if err != nil {
+			t.Fatalf("unexpected error for location %q: %v", loc, err)
+		}
+		if len(advocates) != 0 {
+			t.Errorf("location %q: expected 0 advocates (no literal match), got %d", loc, len(advocates))
+		}
+	}
+}

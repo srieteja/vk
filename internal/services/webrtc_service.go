@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"vk_backend/internal/logger"
@@ -23,6 +24,7 @@ type WebRTCService struct {
 
 type WebRTCToken struct {
 	CallID    string `json:"call_id"`
+	UserID    uint   `json:"user_id"`
 	Type      string `json:"type"`
 	ExpiresAt int64  `json:"expires_at"`
 	Signature string `json:"signature"`
@@ -68,6 +70,7 @@ func (s *WebRTCService) GenerateToken(callID uint, userID uint) (string, error) 
 	expiresAt := time.Now().Add(1 * time.Hour).Unix()
 	token := WebRTCToken{
 		CallID:    fmt.Sprintf("%d", callID),
+		UserID:    userID,
 		Type:      "webrtc",
 		ExpiresAt: expiresAt,
 	}
@@ -134,11 +137,41 @@ func (s *WebRTCService) ValidateToken(tokenString string) (*WebRTCToken, error) 
 	return &token, nil
 }
 
+// VerifyMembership re-checks call membership at connect time (not just at
+// token-issuance time), so a token that's still cryptographically valid but
+// stale relative to the call's current state (e.g. the call already ended)
+// is rejected rather than allowed to join the signaling room.
+func (s *WebRTCService) VerifyMembership(callIDStr string, userID uint) error {
+	callID, err := strconv.ParseUint(callIDStr, 10, 32)
+	if err != nil {
+		return errors.New("invalid call id")
+	}
+
+	var call models.Call
+	if err := s.db.First(&call, uint(callID)).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return errors.New("call not found")
+		}
+		return errors.New("database error")
+	}
+
+	if call.CallerID != userID && call.ReceiverID != userID {
+		return errors.New("unauthorized access to call")
+	}
+
+	if call.Status != "initiated" && call.Status != "accepted" {
+		return errors.New("call is not active")
+	}
+
+	return nil
+}
+
 // createSignature creates HMAC signature for the token
 func (s *WebRTCService) createSignature(token WebRTCToken) (string, error) {
 	// Create a copy without signature for signing
 	signToken := WebRTCToken{
 		CallID:    token.CallID,
+		UserID:    token.UserID,
 		Type:      token.Type,
 		ExpiresAt: token.ExpiresAt,
 	}

@@ -2,6 +2,8 @@ package database
 
 import (
 	"fmt"
+	"log"
+	"os"
 	"time"
 
 	"vk_backend/internal/config"
@@ -9,10 +11,21 @@ import (
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	gormlogger "gorm.io/gorm/logger"
 )
 
 func InitDB(cfg *config.Config) (*gorm.DB, error) {
-	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{})
+	// ParameterizedQueries prevents query logs from interpolating bound
+	// values (emails, tokens, etc.) into the printed SQL. IgnoreRecordNotFoundError
+	// stops routine lookups (e.g. a failed login) from being logged as errors.
+	gormLog := gormlogger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), gormlogger.Config{
+		SlowThreshold:             200 * time.Millisecond,
+		LogLevel:                  gormlogger.Warn,
+		IgnoreRecordNotFoundError: true,
+		ParameterizedQueries:      true,
+	})
+
+	db, err := gorm.Open(postgres.Open(cfg.DatabaseURL), &gorm.Config{Logger: gormLog})
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect: %w", err)
 	}

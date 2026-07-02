@@ -19,6 +19,8 @@ var ErrSessionNotFound = errors.New("session not found")
 type Store interface {
 	Create(ctx context.Context, session *models.Session) error
 	GetByToken(ctx context.Context, token string) (*models.Session, error)
+	DeleteByToken(ctx context.Context, token string) error
+	DeleteByUserID(ctx context.Context, userID uint) error
 }
 
 type dbStore struct {
@@ -43,6 +45,14 @@ func (s *dbStore) GetByToken(ctx context.Context, token string) (*models.Session
 	return &session, nil
 }
 
+func (s *dbStore) DeleteByToken(ctx context.Context, token string) error {
+	return s.db.WithContext(ctx).Where("token = ?", token).Delete(&models.Session{}).Error
+}
+
+func (s *dbStore) DeleteByUserID(ctx context.Context, userID uint) error {
+	return s.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&models.Session{}).Error
+}
+
 type redisStore struct {
 	client *redis.Client
 	prefix string
@@ -54,8 +64,18 @@ type redisSession struct {
 	ExpiresAt int64  `json:"expires_at"`
 }
 
+// userIndexTTL bounds how long a stale per-user token index can survive
+// after their last login, so DeleteByUserID doesn't require an unbounded
+// Redis SCAN. It's set well above the session TTL (24h) so an active user's
+// index never expires out from under a still-valid session.
+const userIndexTTL = 7 * 24 * time.Hour
+
 func (s *redisStore) key(token string) string {
 	return fmt.Sprintf("%s%s", s.prefix, token)
+}
+
+func (s *redisStore) userIndexKey(userID uint) string {
+	return fmt.Sprintf("%suser:%d:tokens", s.prefix, userID)
 }
 
 func (s *redisStore) Create(ctx context.Context, session *models.Session) error {
@@ -74,7 +94,18 @@ func (s *redisStore) Create(ctx context.Context, session *models.Session) error 
 		return ErrSessionNotFound
 	}
 
-	return s.client.Set(ctx, s.key(session.Token), data, ttl).Err()
+	if err := s.client.Set(ctx, s.key(session.Token), data, ttl).Err(); err != nil {
+		return err
+	}
+
+	// Best-effort: the per-user index only accelerates DeleteByUserID: if
+	// this fails, revocation falls back to a no-op for this token rather
+	// than a failed login.
+	indexKey := s.userIndexKey(session.UserID)
+	s.client.SAdd(ctx, indexKey, session.Token)
+	s.client.Expire(ctx, indexKey, userIndexTTL)
+
+	return nil
 }
 
 func (s *redisStore) GetByToken(ctx context.Context, token string) (*models.Session, error) {
@@ -102,6 +133,44 @@ func (s *redisStore) GetByToken(ctx context.Context, token string) (*models.Sess
 		Token:     token,
 		ExpiresAt: expiresAt,
 	}, nil
+}
+
+func (s *redisStore) DeleteByToken(ctx context.Context, token string) error {
+	session, err := s.GetByToken(ctx, token)
+	if err != nil {
+		if errors.Is(err, ErrSessionNotFound) {
+			return nil // already gone; logout is idempotent
+		}
+		return err
+	}
+
+	if err := s.client.Del(ctx, s.key(token)).Err(); err != nil {
+		return err
+	}
+	s.client.SRem(ctx, s.userIndexKey(session.UserID), token) // best-effort
+
+	return nil
+}
+
+func (s *redisStore) DeleteByUserID(ctx context.Context, userID uint) error {
+	indexKey := s.userIndexKey(userID)
+	tokens, err := s.client.SMembers(ctx, indexKey).Result()
+	if err != nil {
+		return err
+	}
+	if len(tokens) == 0 {
+		return nil
+	}
+
+	keys := make([]string, len(tokens))
+	for i, t := range tokens {
+		keys[i] = s.key(t)
+	}
+	if err := s.client.Del(ctx, keys...).Err(); err != nil {
+		return err
+	}
+
+	return s.client.Del(ctx, indexKey).Err()
 }
 
 type hybridStore struct {
@@ -153,6 +222,30 @@ func (s *hybridStore) GetByToken(ctx context.Context, token string) (*models.Ses
 	}
 
 	return &session, nil
+}
+
+func (s *hybridStore) DeleteByToken(ctx context.Context, token string) error {
+	if err := s.db.WithContext(ctx).Where("token = ?", token).Delete(&models.Session{}).Error; err != nil {
+		return err
+	}
+	if s.redis != nil {
+		if err := s.redis.DeleteByToken(ctx, token); err != nil {
+			s.logger.Info("Failed to delete session from redis: %v", err)
+		}
+	}
+	return nil
+}
+
+func (s *hybridStore) DeleteByUserID(ctx context.Context, userID uint) error {
+	if err := s.db.WithContext(ctx).Where("user_id = ?", userID).Delete(&models.Session{}).Error; err != nil {
+		return err
+	}
+	if s.redis != nil {
+		if err := s.redis.DeleteByUserID(ctx, userID); err != nil {
+			s.logger.Info("Failed to delete sessions from redis for user %d: %v", userID, err)
+		}
+	}
+	return nil
 }
 
 func NewStore(db *gorm.DB, redisClient *redis.Client, mode string) (Store, string, error) {

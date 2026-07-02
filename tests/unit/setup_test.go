@@ -28,6 +28,14 @@ func setupTestDB() *gorm.DB {
 		panic("failed to migrate schema")
 	}
 
+	// SQLite ":memory:" is scoped to a single connection: a second pooled
+	// connection would see a fresh, unmigrated database. Pin the pool to one
+	// connection so goroutine-spawned queries (e.g. the WebSocket handler in
+	// signaling tests) share the same in-memory database as the setup above.
+	if sqlDB, err := db.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(1)
+	}
+
 	return db
 }
 

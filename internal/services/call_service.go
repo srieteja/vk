@@ -82,10 +82,12 @@ func (s *CallService) AcceptCall(callID uint, userID uint) (*models.Call, error)
 		return nil, errors.New("database error")
 	}
 
-	// Verify user is the receiver of this call
+	// Return the same "not found" error for a real-but-not-yours call as for
+	// a nonexistent one, so a client can't enumerate other users' call IDs
+	// by distinguishing the two responses.
 	if call.ReceiverID != userID {
 		s.logger.Info("AcceptCall failed: user not authorized: callID=%d, userID=%d, receiverID=%d", callID, userID, call.ReceiverID)
-		return nil, errors.New("unauthorized: you are not the receiver of this call")
+		return nil, errors.New("call not found")
 	}
 
 	// Check if call is in valid state to accept
@@ -132,10 +134,11 @@ func (s *CallService) EndCall(callID uint, userID uint) (*models.Call, error) {
 		return nil, errors.New("database error")
 	}
 
-	// Verify user is part of this call (either caller or receiver)
+	// Return the same "not found" error for a real-but-not-yours call as for
+	// a nonexistent one (see AcceptCall).
 	if call.CallerID != userID && call.ReceiverID != userID {
 		s.logger.Info("EndCall failed: user not authorized: callID=%d, userID=%d", callID, userID)
-		return nil, errors.New("unauthorized: you are not part of this call")
+		return nil, errors.New("call not found")
 	}
 
 	// Check if call is in valid state to end
@@ -189,10 +192,11 @@ func (s *CallService) GetCall(callID uint, userID uint) (*models.Call, error) {
 		return nil, errors.New("database error")
 	}
 
-	// Verify user is part of this call
+	// Return the same "not found" error for a real-but-not-yours call as for
+	// a nonexistent one (see AcceptCall).
 	if call.CallerID != userID && call.ReceiverID != userID {
 		s.logger.Info("GetCall failed: user not authorized: callID=%d, userID=%d", callID, userID)
-		return nil, errors.New("unauthorized: you are not part of this call")
+		return nil, errors.New("call not found")
 	}
 
 	return &call, nil

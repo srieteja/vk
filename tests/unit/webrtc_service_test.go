@@ -1,6 +1,7 @@
 package unit
 
 import (
+	"fmt"
 	"testing"
 
 	"vk_backend/internal/models"
@@ -40,6 +41,9 @@ func TestGenerateAndValidateToken(t *testing.T) {
 
 	if parsedToken.CallID != "1" {
 		t.Errorf("expected call ID 1, got %s", parsedToken.CallID)
+	}
+	if parsedToken.UserID != 1 {
+		t.Errorf("expected user ID 1 embedded in token, got %d", parsedToken.UserID)
 	}
 }
 
@@ -85,5 +89,39 @@ func TestValidateToken_InvalidSignature(t *testing.T) {
 	_, err := otherService.ValidateToken(token)
 	if err == nil {
 		t.Fatal("expected error for invalid signature")
+	}
+}
+
+func TestVerifyMembership(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewWebRTCService(db, "secret")
+
+	call := models.Call{CallerID: 1, ReceiverID: 2, Status: "initiated"}
+	db.Create(&call)
+	callIDStr := fmt.Sprintf("%d", call.ID)
+
+	if err := service.VerifyMembership(callIDStr, 1); err != nil {
+		t.Errorf("expected caller to pass membership check, got %v", err)
+	}
+	if err := service.VerifyMembership(callIDStr, 2); err != nil {
+		t.Errorf("expected receiver to pass membership check, got %v", err)
+	}
+	if err := service.VerifyMembership(callIDStr, 99); err == nil {
+		t.Error("expected non-member to fail membership check")
+	}
+	if err := service.VerifyMembership("999999", 1); err == nil {
+		t.Error("expected nonexistent call to fail membership check")
+	}
+}
+
+func TestVerifyMembership_InactiveCallRejected(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewWebRTCService(db, "secret")
+
+	call := models.Call{CallerID: 1, ReceiverID: 2, Status: "completed"}
+	db.Create(&call)
+
+	if err := service.VerifyMembership(fmt.Sprintf("%d", call.ID), 1); err == nil {
+		t.Error("expected membership check to fail for a completed call")
 	}
 }

@@ -80,7 +80,7 @@ func (s *PaymentService) InitiatePayment(clientID, advocateID uint, amount float
 	return payment, nil
 }
 
-func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
+func (s *PaymentService) VerifyPayment(txnID string, requestingClientID uint) (*models.Payment, error) {
 	s.logger.Finer("VerifyPayment called: transactionID=%s", txnID)
 
 	if txnID == "" {
@@ -96,6 +96,14 @@ func (s *PaymentService) VerifyPayment(txnID string) (*models.Payment, error) {
 		}
 		s.logger.Severe("VerifyPayment failed: database error: %v", err)
 		return nil, errors.New("database error")
+	}
+
+	// Return the same "not found" error for a real-but-not-yours transaction
+	// as for a nonexistent one, so a client can't enumerate other users'
+	// transaction IDs by distinguishing the two responses.
+	if payment.ClientID != requestingClientID {
+		s.logger.Info("VerifyPayment failed: transaction not owned by requester: txnID=%s, ownerID=%d, requesterID=%d", txnID, payment.ClientID, requestingClientID)
+		return nil, errors.New("transaction not found")
 	}
 
 	if payment.Status == "completed" {

@@ -109,6 +109,34 @@ func TestAcceptCall_Unauthorized(t *testing.T) {
 	}
 }
 
+func TestCallOwnershipErrorsMatchNotFound(t *testing.T) {
+	db := setupTestDB()
+	service := services.NewCallService(db, nil)
+
+	createdCall, _ := service.InitiateCall(1, "client", 2, "advocate")
+
+	_, notFoundErr := service.GetCall(99999, 1)
+	_, notOwnedErr := service.GetCall(createdCall.ID, 99)
+	if notOwnedErr == nil || notOwnedErr.Error() != notFoundErr.Error() {
+		t.Errorf("GetCall: real-but-not-yours and not-found errors must be identical to avoid enumeration, got %q vs %q",
+			notOwnedErr, notFoundErr)
+	}
+
+	_, acceptNotFoundErr := service.AcceptCall(99999, 2)
+	_, acceptNotOwnedErr := service.AcceptCall(createdCall.ID, 3)
+	if acceptNotOwnedErr == nil || acceptNotOwnedErr.Error() != acceptNotFoundErr.Error() {
+		t.Errorf("AcceptCall: real-but-not-yours and not-found errors must be identical to avoid enumeration, got %q vs %q",
+			acceptNotOwnedErr, acceptNotFoundErr)
+	}
+
+	_, endNotFoundErr := service.EndCall(99999, 1)
+	_, endNotOwnedErr := service.EndCall(createdCall.ID, 99)
+	if endNotOwnedErr == nil || endNotOwnedErr.Error() != endNotFoundErr.Error() {
+		t.Errorf("EndCall: real-but-not-yours and not-found errors must be identical to avoid enumeration, got %q vs %q",
+			endNotOwnedErr, endNotFoundErr)
+	}
+}
+
 func TestEndCall_AlreadyCompleted(t *testing.T) {
 	db := setupTestDB()
 	service := services.NewCallService(db, nil)

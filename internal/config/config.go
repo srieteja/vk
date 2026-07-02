@@ -14,9 +14,11 @@ type Config struct {
 	DatabaseURL               string
 	MaxConnections            int
 	JWTSecret                 string
+	AdminAPIKey               string
 	OAuthStateSecret          string
 	OAuthStateTTLSeconds      int
 	WebSocketAllowedOrigins   []string
+	CORSAllowedOrigins        []string
 	RedisAddr                 string
 	RedisPassword             string
 	RedisDB                   int
@@ -57,9 +59,11 @@ func LoadConfig() *Config {
 		DatabaseURL:               getEnv("DATABASE_URL", ""),
 		MaxConnections:            maxConnections,
 		JWTSecret:                 jwtSecret,
+		AdminAPIKey:               getEnv("ADMIN_API_KEY", ""),
 		OAuthStateSecret:          getEnv("OAUTH_STATE_SECRET", ""),
 		OAuthStateTTLSeconds:      getEnvInt("OAUTH_STATE_TTL_SECONDS", 600),
 		WebSocketAllowedOrigins:   getEnvCSV("WEBSOCKET_ALLOWED_ORIGINS", ""),
+		CORSAllowedOrigins:        getEnvCSV("CORS_ALLOWED_ORIGINS", ""),
 		RedisAddr:                 getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:             getEnv("REDIS_PASSWORD", ""),
 		RedisDB:                   getEnvInt("REDIS_DB", 0),
@@ -115,6 +119,11 @@ func (c *Config) Validate() error {
 		weak := map[string]string{
 			"JWT_SECRET":         c.JWTSecret,
 			"OAUTH_STATE_SECRET": c.OAuthStateSecret,
+		}
+		// ADMIN_API_KEY is optional (empty disables the admin endpoints
+		// entirely), but if it's set at all it must not be weak.
+		if c.AdminAPIKey != "" {
+			weak["ADMIN_API_KEY"] = c.AdminAPIKey
 		}
 		for name, val := range weak {
 			if len(val) < 32 || strings.Contains(val, "change-in-production") || val == "secret" {

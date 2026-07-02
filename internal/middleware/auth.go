@@ -59,6 +59,7 @@ func AuthMiddleware(store sessions.Store) gin.HandlerFunc {
 		// Store user info in context
 		c.Set("user_id", session.UserID)
 		c.Set("user_type", session.UserType)
+		c.Set("session_token", token)
 
 		log.Finest("AuthMiddleware: authentication successful for userID=%d, userType=%s", session.UserID, session.UserType)
 		c.Next()

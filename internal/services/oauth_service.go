@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"vk_backend/internal/config"
+	piilog "vk_backend/internal/log"
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
 
@@ -145,7 +146,7 @@ func (s *OAuthService) findOrCreateAdvocate(userInfo struct {
 			advocate.GoogleID = &userInfo.ID
 			s.db.Save(&advocate)
 		}
-		s.logger.Info("Advocate found via OAuth: ID=%d, Email=%s", advocate.ID, advocate.Email)
+		s.logger.Info("Advocate found via OAuth: ID=%d, Email=%s", advocate.ID, piilog.MaskEmail(advocate.Email))
 		return &advocate, nil
 	}
 
@@ -172,7 +173,7 @@ func (s *OAuthService) findOrCreateAdvocate(userInfo struct {
 		return nil, errors.New("failed to create advocate")
 	}
 
-	s.logger.Info("Advocate created via OAuth: ID=%d, Email=%s", advocate.ID, advocate.Email)
+	s.logger.Info("Advocate created via OAuth: ID=%d, Email=%s", advocate.ID, piilog.MaskEmail(advocate.Email))
 	return &advocate, nil
 }
 
@@ -197,7 +198,7 @@ func (s *OAuthService) findOrCreateClient(userInfo struct {
 			client.GoogleID = &userInfo.ID
 			s.db.Save(&client)
 		}
-		s.logger.Info("Client found via OAuth: ID=%d, Email=%s", client.ID, client.Email)
+		s.logger.Info("Client found via OAuth: ID=%d, Email=%s", client.ID, piilog.MaskEmail(client.Email))
 		return &client, nil
 	}
 
@@ -222,7 +223,7 @@ func (s *OAuthService) findOrCreateClient(userInfo struct {
 		return nil, errors.New("failed to create client")
 	}
 
-	s.logger.Info("Client created via OAuth: ID=%d, Email=%s", client.ID, client.Email)
+	s.logger.Info("Client created via OAuth: ID=%d, Email=%s", client.ID, piilog.MaskEmail(client.Email))
 	return &client, nil
 }
 

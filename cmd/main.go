@@ -14,6 +14,7 @@ import (
 	"vk_backend/internal/database"
 	"vk_backend/internal/idempotency"
 	"vk_backend/internal/infra"
+	piilog "vk_backend/internal/log"
 	"vk_backend/internal/logger"
 	"vk_backend/internal/metrics"
 	"vk_backend/internal/middleware"
@@ -23,9 +24,13 @@ import (
 	"vk_backend/internal/services"
 	"vk_backend/internal/sessions"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	limiter "github.com/ulule/limiter/v3"
+	limitermemory "github.com/ulule/limiter/v3/drivers/store/memory"
+	limiterredis "github.com/ulule/limiter/v3/drivers/store/redis"
 	"go.opentelemetry.io/contrib/instrumentation/github.com/gin-gonic/gin/otelgin"
 )
 
@@ -129,6 +134,19 @@ func main() {
 	// Gin router
 	router := gin.Default()
 	router.Use(middleware.RequestIDMiddleware())
+	router.Use(middleware.MaxBodyBytes(10 << 20)) // 10MB
+	if len(cfg.CORSAllowedOrigins) > 0 {
+		router.Use(cors.New(cors.Config{
+			AllowOrigins:     cfg.CORSAllowedOrigins,
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowHeaders:     []string{"Authorization", "Content-Type", "X-Request-Id", "X-Admin-Key"},
+			ExposeHeaders:    []string{"X-Request-Id"},
+			AllowCredentials: false,
+			MaxAge:           12 * time.Hour,
+		}))
+	} else {
+		log.Info("CORS_ALLOWED_ORIGINS not set; no cross-origin requests will be allowed")
+	}
 	if tracingEnabled {
 		router.Use(otelgin.Middleware(cfg.OtelServiceName))
 	}
@@ -156,6 +174,29 @@ func main() {
 	// Initialize middleware
 	authMiddleware := middleware.AuthMiddleware(sessionStore)
 
+	// Rate limiting: Redis-backed so limits are shared across instances;
+	// falls back to an in-process store when Redis isn't configured (local dev).
+	var rateLimitStore limiter.Store
+	if redisClient != nil {
+		rateLimitStore, err = limiterredis.NewStoreWithOptions(redisClient, limiter.StoreOptions{Prefix: "ratelimit"})
+		if err != nil {
+			log.Severe("Failed to init redis rate limit store: %v", err)
+			os.Exit(1)
+		}
+	} else {
+		log.Info("Redis unavailable, using in-process rate limit store (not shared across instances)")
+		rateLimitStore = limitermemory.NewStore()
+	}
+	authRateLimit := middleware.NewRateLimiter(
+		limiter.New(rateLimitStore, limiter.Rate{Period: time.Minute, Limit: 5}),
+		middleware.IPKeyGetter("auth"), log)
+	oauthRateLimit := middleware.NewRateLimiter(
+		limiter.New(rateLimitStore, limiter.Rate{Period: time.Minute, Limit: 10}),
+		middleware.IPKeyGetter("oauth"), log)
+	paymentRateLimit := middleware.NewRateLimiter(
+		limiter.New(rateLimitStore, limiter.Rate{Period: time.Minute, Limit: 10}),
+		middleware.UserKeyGetter("payment"), log)
+
 	// API routes
 	api := router.Group("/api")
 	{
@@ -166,10 +207,14 @@ func main() {
 
 		auth := api.Group("/auth")
 		{
+			credsAuth := auth.Group("")
+			credsAuth.Use(authRateLimit)
+			oauthAuth := auth.Group("")
+			oauthAuth.Use(oauthRateLimit)
 			// ---------------------------
 			// Advocate (Provider) routes
 			// ---------------------------
-			auth.POST("/advocate/register", func(c *gin.Context) {
+			credsAuth.POST("/advocate/register", func(c *gin.Context) {
 				log.Finer("Advocate registration request received")
 				log.Finest("Request method: %s, Content-Type: %s, ContentLength: %d",
 					c.Request.Method, c.GetHeader("Content-Type"), c.Request.ContentLength)
@@ -208,11 +253,11 @@ func main() {
 					return
 				}
 
-				log.Info("Advocate registered successfully: ID=%d, Email=%s", advocate.ID, advocate.Email)
+				log.Info("Advocate registered successfully: ID=%d, Email=%s", advocate.ID, piilog.MaskEmail(advocate.Email))
 				c.JSON(200, advocate)
 			})
 
-			auth.POST("/advocate/login", func(c *gin.Context) {
+			credsAuth.POST("/advocate/login", func(c *gin.Context) {
 				log.Finer("Advocate login request received")
 				var req models.LoginRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
@@ -223,7 +268,7 @@ func main() {
 
 				advocate, err := authService.LoginAdvocate(req.Email, req.Password)
 				if err != nil {
-					log.Info("Advocate login failed for email: %s", req.Email)
+					log.Info("Advocate login failed for email: %s", piilog.MaskEmail(req.Email))
 					c.JSON(401, gin.H{"error": err.Error()})
 					return
 				}
@@ -236,7 +281,7 @@ func main() {
 					return
 				}
 
-				log.Info("Advocate logged in successfully: ID=%d, Email=%s", advocate.ID, advocate.Email)
+				log.Info("Advocate logged in successfully: ID=%d, Email=%s", advocate.ID, piilog.MaskEmail(advocate.Email))
 
 				// Return advocate with token
 				response := gin.H{
@@ -260,7 +305,7 @@ func main() {
 			// ---------------------------
 			// Client (Consumer) routes
 			// ---------------------------
-			auth.POST("/client/register", func(c *gin.Context) {
+			credsAuth.POST("/client/register", func(c *gin.Context) {
 				log.Finer("Client registration request received")
 				var req models.RegisterRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
@@ -276,11 +321,11 @@ func main() {
 					return
 				}
 
-				log.Info("Client registered successfully: ID=%d, Email=%s", client.ID, client.Email)
+				log.Info("Client registered successfully: ID=%d, Email=%s", client.ID, piilog.MaskEmail(client.Email))
 				c.JSON(200, client)
 			})
 
-			auth.POST("/client/login", func(c *gin.Context) {
+			credsAuth.POST("/client/login", func(c *gin.Context) {
 				log.Finer("Client login request received")
 				var req models.LoginRequest
 				if err := c.ShouldBindJSON(&req); err != nil {
@@ -291,7 +336,7 @@ func main() {
 
 				client, err := authService.LoginClient(req.Email, req.Password)
 				if err != nil {
-					log.Info("Client login failed for email: %s", req.Email)
+					log.Info("Client login failed for email: %s", piilog.MaskEmail(req.Email))
 					c.JSON(401, gin.H{"error": err.Error()})
 					return
 				}
@@ -304,7 +349,7 @@ func main() {
 					return
 				}
 
-				log.Info("Client logged in successfully: ID=%d, Email=%s", client.ID, client.Email)
+				log.Info("Client logged in successfully: ID=%d, Email=%s", client.ID, piilog.MaskEmail(client.Email))
 
 				// Return client with token
 				response := gin.H{
@@ -325,7 +370,7 @@ func main() {
 			// ---------------------------
 			// Google OAuth routes
 			// ---------------------------
-			auth.GET("/google/advocate", func(c *gin.Context) {
+			oauthAuth.GET("/google/advocate", func(c *gin.Context) {
 				state := oauthService.GenerateState("advocate")
 				if state == "" {
 					c.JSON(500, gin.H{"error": "failed to generate oauth state"})
@@ -335,7 +380,7 @@ func main() {
 				c.Redirect(http.StatusTemporaryRedirect, url)
 			})
 
-			auth.GET("/google/client", func(c *gin.Context) {
+			oauthAuth.GET("/google/client", func(c *gin.Context) {
 				state := oauthService.GenerateState("client")
 				if state == "" {
 					c.JSON(500, gin.H{"error": "failed to generate oauth state"})
@@ -345,7 +390,7 @@ func main() {
 				c.Redirect(http.StatusTemporaryRedirect, url)
 			})
 
-			auth.GET("/google/callback", func(c *gin.Context) {
+			oauthAuth.GET("/google/callback", func(c *gin.Context) {
 				code := c.Query("code")
 				state := c.Query("state")
 
@@ -376,41 +421,79 @@ func main() {
 				var userData gin.H
 				if userType == "advocate" {
 					var advocate models.Advocate
-					if err := db.First(&advocate, session.UserID).Error; err == nil {
-						userData = gin.H{
-							"id":            advocate.ID,
-							"email":         advocate.Email,
-							"name":          advocate.Name,
-							"availability":  advocate.Availability,
-							"uuid":          advocate.UUID,
-							"profile_image": advocate.ProfileImage,
-							"bio":           advocate.Bio,
-							"earnings":      advocate.Earnings,
-							"hourly_rate":   advocate.HourlyRate,
-							"created_at":    advocate.CreatedAt,
-							"updated_at":    advocate.UpdatedAt,
-							"token":         session.Token,
-						}
+					if err := db.First(&advocate, session.UserID).Error; err != nil {
+						log.Severe("OAuth callback: failed to load advocate ID=%d after login: %v", session.UserID, err)
+						c.JSON(500, gin.H{"error": "failed to load user after login"})
+						return
+					}
+					userData = gin.H{
+						"id":            advocate.ID,
+						"email":         advocate.Email,
+						"name":          advocate.Name,
+						"availability":  advocate.Availability,
+						"uuid":          advocate.UUID,
+						"profile_image": advocate.ProfileImage,
+						"bio":           advocate.Bio,
+						"earnings":      advocate.Earnings,
+						"hourly_rate":   advocate.HourlyRate,
+						"created_at":    advocate.CreatedAt,
+						"updated_at":    advocate.UpdatedAt,
+						"token":         session.Token,
 					}
 				} else {
 					var client models.Client
-					if err := db.First(&client, session.UserID).Error; err == nil {
-						userData = gin.H{
-							"id":            client.ID,
-							"email":         client.Email,
-							"name":          client.Name,
-							"uuid":          client.UUID,
-							"profile_image": client.ProfileImage,
-							"balance":       client.Balance,
-							"created_at":    client.CreatedAt,
-							"updated_at":    client.UpdatedAt,
-							"token":         session.Token,
-						}
+					if err := db.First(&client, session.UserID).Error; err != nil {
+						log.Severe("OAuth callback: failed to load client ID=%d after login: %v", session.UserID, err)
+						c.JSON(500, gin.H{"error": "failed to load user after login"})
+						return
+					}
+					userData = gin.H{
+						"id":            client.ID,
+						"email":         client.Email,
+						"name":          client.Name,
+						"uuid":          client.UUID,
+						"profile_image": client.ProfileImage,
+						"balance":       client.Balance,
+						"created_at":    client.CreatedAt,
+						"updated_at":    client.UpdatedAt,
+						"token":         session.Token,
 					}
 				}
 
 				log.Info("OAuth login successful: UserType=%s, UserID=%d", userType, session.UserID)
 				c.JSON(200, userData)
+			})
+
+			auth.POST("/logout", authMiddleware, func(c *gin.Context) {
+				token, _ := c.Get("session_token")
+				if err := authService.Logout(c.Request.Context(), token.(string)); err != nil {
+					c.JSON(500, gin.H{"error": err.Error()})
+					return
+				}
+				c.JSON(200, gin.H{"status": "logged out"})
+			})
+		}
+
+		// ---------------------------
+		// Admin routes
+		// ---------------------------
+		admin := api.Group("/admin")
+		admin.Use(middleware.AdminAuth(cfg.AdminAPIKey))
+		{
+			admin.POST("/sessions/revoke", func(c *gin.Context) {
+				var req struct {
+					UserID uint `json:"user_id" binding:"required"`
+				}
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+				if err := authService.RevokeUserSessions(c.Request.Context(), req.UserID); err != nil {
+					c.JSON(500, gin.H{"error": err.Error()})
+					return
+				}
+				log.Info("Admin revoked all sessions for userID=%d", req.UserID)
+				c.JSON(200, gin.H{"status": "revoked"})
 			})
 		}
 
@@ -542,6 +625,12 @@ func main() {
 			})
 
 			client.GET("/available-users", func(c *gin.Context) {
+				userType, _ := c.Get("user_type")
+				if userType != "client" {
+					c.JSON(403, gin.H{"error": "access denied"})
+					return
+				}
+
 				// Parse query parameters
 				filter := &services.AdvocateFilter{
 					Availability: c.Query("availability"), // "all" or "available"/"online"
@@ -571,7 +660,6 @@ func main() {
 				for _, a := range advocates {
 					users = append(users, gin.H{
 						"id":            a.ID,
-						"email":         a.Email,
 						"name":          a.Name,
 						"availability":  a.Availability,
 						"location":      a.Location,
@@ -609,6 +697,7 @@ func main() {
 
 			payment := client.Group("/payment")
 			{
+				payment.Use(paymentRateLimit)
 				payment.Use(middleware.IdempotencyMiddleware(idempotencyStore, idempotencyTTL))
 				payment.POST("/initiate", func(c *gin.Context) {
 					userID, _ := c.Get("user_id")
@@ -654,15 +743,9 @@ func main() {
 						return
 					}
 
-					payment, err := paymentService.VerifyPayment(req.TransactionID)
+					payment, err := paymentService.VerifyPayment(req.TransactionID, userID.(uint))
 					if err != nil {
 						c.JSON(400, gin.H{"error": err.Error()})
-						return
-					}
-
-					// Verify the payment belongs to this client
-					if payment.ClientID != userID.(uint) {
-						c.JSON(403, gin.H{"error": "access denied"})
 						return
 					}
 

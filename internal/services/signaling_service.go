@@ -23,9 +23,14 @@ type SignalingMessage struct {
 	Target  string          `json:"target,omitempty"`  // "peer" (default)
 }
 
+// maxPeersPerCall bounds a call's signaling room to the two participants
+// (caller and receiver); a third join attempt (e.g. a leaked/replayed
+// token) is rejected rather than silently added to the broadcast group.
+const maxPeersPerCall = 2
+
 type Client struct {
 	conn   *websocket.Conn
-	userID uint //nolint:unused // reserved for the call-membership check tracked in the signaling identity gap (see line ~140)
+	userID uint
 	callID string
 }
 
@@ -137,19 +142,36 @@ func (s *SignalingService) HandleWebSocket(w http.ResponseWriter, r *http.Reques
 	}
 
 	callID := tokenData.CallID
-	// We currently don't have userID in the token struct (it just has CallID, Type, ExpiresAt)
-	// Ideally, the token should contain UserID to identify the sender.
-	// For now, we will proceed by just grouping by CallID.
-	// TODO: Update WebRTCToken to include UserID for better identification
+
+	// 3b. Re-verify call membership against current DB state: the token may
+	// still be cryptographically valid but stale (e.g. the call ended, or
+	// was never this user's to join) relative to when it was issued.
+	if err := s.webrtcService.VerifyMembership(callID, tokenData.UserID); err != nil {
+		s.logger.Info("Signaling membership check failed: callID=%s, userID=%d, err=%v", callID, tokenData.UserID, err)
+		if writeErr := conn.WriteJSON(map[string]string{"error": "unauthorized"}); writeErr != nil {
+			s.logger.Info("Failed to send unauthorized response: %v", writeErr)
+		}
+		_ = conn.Close()
+		return
+	}
 
 	client := &Client{
 		conn:   conn,
+		userID: tokenData.UserID,
 		callID: callID,
 	}
 
-	// 4. Register Client
-	s.addClient(callID, client)
-	s.logger.Info("Peer connected to call %s", callID)
+	// 4. Register Client (capped at maxPeersPerCall so a leaked/replayed
+	// token can't add a third participant to the room)
+	if !s.addClient(callID, client) {
+		s.logger.Info("Rejected peer for call %s: room is full", callID)
+		if writeErr := conn.WriteJSON(map[string]string{"error": "call room is full"}); writeErr != nil {
+			s.logger.Info("Failed to send room-full response: %v", writeErr)
+		}
+		_ = conn.Close()
+		return
+	}
+	s.logger.Info("Peer connected to call %s: userID=%d", callID, tokenData.UserID)
 	s.ensureSubscription(callID)
 
 	// 5. Message Loop
@@ -173,10 +195,17 @@ func (s *SignalingService) HandleWebSocket(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-func (s *SignalingService) addClient(callID string, client *Client) {
+// addClient registers client under callID and reports whether it was
+// admitted. It's rejected once the call's room already holds
+// maxPeersPerCall peers.
+func (s *SignalingService) addClient(callID string, client *Client) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if len(s.calls[callID]) >= maxPeersPerCall {
+		return false
+	}
 	s.calls[callID] = append(s.calls[callID], client)
+	return true
 }
 
 func (s *SignalingService) removeClient(callID string, client *Client) {

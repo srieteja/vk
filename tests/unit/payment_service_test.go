@@ -69,7 +69,7 @@ func TestVerifyPayment(t *testing.T) {
 		t.Fatalf("setup failed: %v", err)
 	}
 
-	payment, err := service.VerifyPayment(p.TransactionID)
+	payment, err := service.VerifyPayment(p.TransactionID, client.ID)
 
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -88,7 +88,7 @@ func TestVerifyPayment(t *testing.T) {
 	}
 
 	// Verify duplicate verification doesn't double-credit earnings
-	_, err = service.VerifyPayment(p.TransactionID)
+	_, err = service.VerifyPayment(p.TransactionID, client.ID)
 	if err != nil {
 		t.Fatalf("expected no error on duplicate verification, got %v", err)
 	}
@@ -96,6 +96,35 @@ func TestVerifyPayment(t *testing.T) {
 	db.First(&updatedAdvocate, advocate.ID)
 	if updatedAdvocate.Earnings != expectedEarnings {
 		t.Errorf("expected advocate earnings to remain %f, got %f", expectedEarnings, updatedAdvocate.Earnings)
+	}
+}
+
+func TestVerifyPaymentWrongOwnerReturnsSameErrorAsNotFound(t *testing.T) {
+	db := setupTestDB()
+	cfg := setupTestConfig()
+	service := services.NewPaymentService(db, cfg, nil)
+
+	client := models.Client{Name: "Client", Email: "c@test.com", UUID: "c-uuid"}
+	otherClient := models.Client{Name: "Other", Email: "other@test.com", UUID: "other-uuid"}
+	advocate := models.Advocate{Name: "Advocate", Email: "a@test.com", UUID: "a-uuid"}
+	db.Create(&client)
+	db.Create(&otherClient)
+	db.Create(&advocate)
+
+	p, err := service.InitiatePayment(client.ID, advocate.ID, 50.00)
+	if err != nil {
+		t.Fatalf("setup failed: %v", err)
+	}
+
+	_, wrongOwnerErr := service.VerifyPayment(p.TransactionID, otherClient.ID)
+	_, notFoundErr := service.VerifyPayment("txn_does_not_exist", otherClient.ID)
+
+	if wrongOwnerErr == nil {
+		t.Fatal("expected an error when verifying someone else's transaction")
+	}
+	if wrongOwnerErr.Error() != notFoundErr.Error() {
+		t.Errorf("wrong-owner and not-found errors must be identical to avoid enumeration, got %q vs %q",
+			wrongOwnerErr.Error(), notFoundErr.Error())
 	}
 }
 

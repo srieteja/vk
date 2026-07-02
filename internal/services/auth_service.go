@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"time"
 
+	piilog "vk_backend/internal/log"
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
 	"vk_backend/internal/sessions"
@@ -32,7 +33,7 @@ func NewAuthService(db *gorm.DB, sessionStore sessions.Store) *AuthService {
 }
 
 func (s *AuthService) RegisterAdvocate(req *models.RegisterRequest) (*models.Advocate, error) {
-	s.logger.Finer("RegisterAdvocate called for email: %s", req.Email)
+	s.logger.Finer("RegisterAdvocate called for email: %s", piilog.MaskEmail(req.Email))
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
 		s.logger.Info("RegisterAdvocate failed: missing required fields")
@@ -42,7 +43,7 @@ func (s *AuthService) RegisterAdvocate(req *models.RegisterRequest) (*models.Adv
 	// Check if email already exists
 	var existingAdvocate models.Advocate
 	if err := s.db.Where("email = ?", req.Email).First(&existingAdvocate).Error; err == nil {
-		s.logger.Info("RegisterAdvocate failed: email already exists: %s", req.Email)
+		s.logger.Info("RegisterAdvocate failed: email already exists: %s", piilog.MaskEmail(req.Email))
 		return nil, errors.New("email already registered")
 	}
 
@@ -69,12 +70,12 @@ func (s *AuthService) RegisterAdvocate(req *models.RegisterRequest) (*models.Adv
 		return nil, errors.New("failed to create advocate")
 	}
 
-	s.logger.Info("Advocate registered successfully: ID=%d, Email=%s", advocate.ID, advocate.Email)
+	s.logger.Info("Advocate registered successfully: ID=%d, Email=%s", advocate.ID, piilog.MaskEmail(advocate.Email))
 	return advocate, nil
 }
 
 func (s *AuthService) LoginAdvocate(email, password string) (*models.Advocate, error) {
-	s.logger.Finer("LoginAdvocate called for email: %s", email)
+	s.logger.Finer("LoginAdvocate called for email: %s", piilog.MaskEmail(email))
 
 	if email == "" || password == "" {
 		s.logger.Info("LoginAdvocate failed: missing credentials")
@@ -84,7 +85,7 @@ func (s *AuthService) LoginAdvocate(email, password string) (*models.Advocate, e
 	var advocate models.Advocate
 	if err := s.db.Where("email = ?", email).First(&advocate).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			s.logger.Info("LoginAdvocate failed: advocate not found for email: %s", email)
+			s.logger.Info("LoginAdvocate failed: advocate not found for email: %s", piilog.MaskEmail(email))
 			return nil, errors.New("invalid credentials")
 		}
 		s.logger.Severe("LoginAdvocate failed: database error: %v", err)
@@ -93,16 +94,16 @@ func (s *AuthService) LoginAdvocate(email, password string) (*models.Advocate, e
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(advocate.Password), []byte(password)); err != nil {
-		s.logger.Info("LoginAdvocate failed: invalid password for email: %s", email)
+		s.logger.Info("LoginAdvocate failed: invalid password for email: %s", piilog.MaskEmail(email))
 		return nil, errors.New("invalid credentials")
 	}
 
-	s.logger.Info("Advocate logged in successfully: ID=%d, Email=%s", advocate.ID, email)
+	s.logger.Info("Advocate logged in successfully: ID=%d, Email=%s", advocate.ID, piilog.MaskEmail(email))
 	return &advocate, nil
 }
 
 func (s *AuthService) RegisterClient(req *models.RegisterRequest) (*models.Client, error) {
-	s.logger.Finer("RegisterClient called for email: %s", req.Email)
+	s.logger.Finer("RegisterClient called for email: %s", piilog.MaskEmail(req.Email))
 
 	if req.Email == "" || req.Password == "" || req.Name == "" {
 		s.logger.Info("RegisterClient failed: missing required fields")
@@ -112,7 +113,7 @@ func (s *AuthService) RegisterClient(req *models.RegisterRequest) (*models.Clien
 	// Check if email already exists
 	var existingClient models.Client
 	if err := s.db.Where("email = ?", req.Email).First(&existingClient).Error; err == nil {
-		s.logger.Info("RegisterClient failed: email already exists: %s", req.Email)
+		s.logger.Info("RegisterClient failed: email already exists: %s", piilog.MaskEmail(req.Email))
 		return nil, errors.New("email already registered")
 	}
 
@@ -137,12 +138,12 @@ func (s *AuthService) RegisterClient(req *models.RegisterRequest) (*models.Clien
 		return nil, errors.New("failed to create client")
 	}
 
-	s.logger.Info("Client registered successfully: ID=%d, Email=%s", client.ID, client.Email)
+	s.logger.Info("Client registered successfully: ID=%d, Email=%s", client.ID, piilog.MaskEmail(client.Email))
 	return client, nil
 }
 
 func (s *AuthService) LoginClient(email, password string) (*models.Client, error) {
-	s.logger.Finer("LoginClient called for email: %s", email)
+	s.logger.Finer("LoginClient called for email: %s", piilog.MaskEmail(email))
 
 	if email == "" || password == "" {
 		s.logger.Info("LoginClient failed: missing credentials")
@@ -152,7 +153,7 @@ func (s *AuthService) LoginClient(email, password string) (*models.Client, error
 	var client models.Client
 	if err := s.db.Where("email = ?", email).First(&client).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
-			s.logger.Info("LoginClient failed: client not found for email: %s", email)
+			s.logger.Info("LoginClient failed: client not found for email: %s", piilog.MaskEmail(email))
 			return nil, errors.New("invalid credentials")
 		}
 		s.logger.Severe("LoginClient failed: database error: %v", err)
@@ -161,11 +162,11 @@ func (s *AuthService) LoginClient(email, password string) (*models.Client, error
 
 	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(client.Password), []byte(password)); err != nil {
-		s.logger.Info("LoginClient failed: invalid password for email: %s", email)
+		s.logger.Info("LoginClient failed: invalid password for email: %s", piilog.MaskEmail(email))
 		return nil, errors.New("invalid credentials")
 	}
 
-	s.logger.Info("Client logged in successfully: ID=%d, Email=%s", client.ID, email)
+	s.logger.Info("Client logged in successfully: ID=%d, Email=%s", client.ID, piilog.MaskEmail(email))
 	return &client, nil
 }
 
@@ -219,6 +220,31 @@ func (s *AuthService) CreateSession(userID uint, userType string) (*models.Sessi
 
 	s.logger.Finer("Session created successfully: UserID=%d, UserType=%s", userID, userType)
 	return session, nil
+}
+
+// Logout revokes a single session by its token.
+func (s *AuthService) Logout(ctx context.Context, token string) error {
+	if s.sessionStore == nil {
+		return errors.New("session store is not configured")
+	}
+	if err := s.sessionStore.DeleteByToken(ctx, token); err != nil {
+		s.logger.Severe("Logout failed: session store error: %v", err)
+		return errors.New("failed to revoke session")
+	}
+	return nil
+}
+
+// RevokeUserSessions revokes every session belonging to a user (e.g. an
+// admin-triggered forced logout).
+func (s *AuthService) RevokeUserSessions(ctx context.Context, userID uint) error {
+	if s.sessionStore == nil {
+		return errors.New("session store is not configured")
+	}
+	if err := s.sessionStore.DeleteByUserID(ctx, userID); err != nil {
+		s.logger.Severe("RevokeUserSessions failed for userID=%d: session store error: %v", userID, err)
+		return errors.New("failed to revoke sessions")
+	}
+	return nil
 }
 
 func generateToken() (string, error) {

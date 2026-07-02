@@ -2,9 +2,11 @@ package services
 
 import (
 	"errors"
+	"strings"
 
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
+	"vk_backend/internal/validators"
 
 	"gorm.io/gorm"
 )
@@ -139,7 +141,8 @@ func (s *AdvocateService) GetAvailableAdvocates(filter *AdvocateFilter) ([]model
 
 	// Location filter
 	if filter != nil && filter.Location != "" {
-		query = query.Where("LOWER(location) LIKE ?", "%"+filter.Location+"%")
+		escaped := validators.EscapeLikePattern(strings.ToLower(filter.Location))
+		query = query.Where("LOWER(location) LIKE ? ESCAPE '\\'", "%"+escaped+"%")
 	}
 
 	// Rate range filter
