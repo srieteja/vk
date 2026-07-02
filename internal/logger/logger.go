@@ -74,7 +74,7 @@ func (l *Logger) log(priority Priority, format string, args ...interface{}) {
 
 	logLine := fmt.Sprintf("[%s] [%s] [%s] %s\n", timestamp, priorityName, l.serviceName, message)
 
-	l.output.Write([]byte(logLine))
+	_, _ = l.output.Write([]byte(logLine)) // nowhere to report a failure from the logger itself
 }
 
 // Severe logs a SEVERE priority message

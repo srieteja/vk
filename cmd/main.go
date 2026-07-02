@@ -46,18 +46,15 @@ func main() {
 	log.Info("Initializing vk_backend service")
 	log.Finer("Environment: %s, Log Level: %s", cfg.Environment, cfg.LogLevel)
 
+	if err := cfg.Validate(); err != nil {
+		log.Severe("Invalid configuration: %v", err)
+		os.Exit(1)
+	}
+
 	if cfg.Environment == "production" {
 		gin.SetMode(gin.ReleaseMode)
 		log.Finer("Gin mode set to ReleaseMode")
 
-		if cfg.JWTSecret == "" || cfg.JWTSecret == "secret" {
-			log.Severe("JWT_SECRET must be set in production")
-			os.Exit(1)
-		}
-		if cfg.OAuthStateSecret == "" || cfg.OAuthStateSecret == "secret" {
-			log.Severe("OAUTH_STATE_SECRET must be set in production")
-			os.Exit(1)
-		}
 		if cfg.AutoMigrate {
 			log.Info("AUTO_MIGRATE disabled in production")
 			cfg.AutoMigrate = false

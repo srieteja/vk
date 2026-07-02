@@ -12,14 +12,26 @@ import (
 	"vk_backend/internal/logger"
 	"vk_backend/internal/models"
 	"vk_backend/internal/outbox"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
+	envErr := godotenv.Load()
+
 	cfg := config.LoadConfig()
 
 	logPriority := logger.ParsePriority(cfg.LogLevel)
 	logger.Init("vk_backend_worker", logPriority)
 	log := logger.GetLogger()
+	if envErr != nil {
+		log.Info("Failed to load .env: %v", envErr)
+	}
+
+	if err := cfg.Validate(); err != nil {
+		log.Severe("Invalid configuration: %v", err)
+		os.Exit(1)
+	}
 
 	db, err := database.InitDB(cfg)
 	if err != nil {

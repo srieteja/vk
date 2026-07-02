@@ -97,19 +97,20 @@ func (s *OAuthService) HandleCallback(code string, userType string) (*models.Ses
 
 	// Find or create user
 	var userID uint
-	if userType == "advocate" {
+	switch userType {
+	case "advocate":
 		advocate, err := s.findOrCreateAdvocate(userInfo)
 		if err != nil {
 			return nil, err
 		}
 		userID = advocate.ID
-	} else if userType == "client" {
+	case "client":
 		client, err := s.findOrCreateClient(userInfo)
 		if err != nil {
 			return nil, err
 		}
 		userID = client.ID
-	} else {
+	default:
 		return nil, errors.New("invalid user type")
 	}
 

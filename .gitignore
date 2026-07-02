@@ -15,3 +15,9 @@ coverage.out
 coverage.html
 dist/
 build/
+/main
+/vk_backend
+/vk_worker
+*.profraw
+logfile
+old.env.example

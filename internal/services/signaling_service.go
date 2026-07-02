@@ -25,7 +25,7 @@ type SignalingMessage struct {
 
 type Client struct {
 	conn   *websocket.Conn
-	userID uint
+	userID uint //nolint:unused // reserved for the call-membership check tracked in the signaling identity gap (see line ~140)
 	callID string
 }
 

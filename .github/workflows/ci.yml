@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main, beta]
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  GO_VERSION_FILE: go.mod
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+      - run: go build ./...
+
+  vet:
+    name: Vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+      - run: go vet ./...
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+      - uses: golangci/golangci-lint-action@v7
+        with:
+          version: v2.12.2
+
+  test:
+    name: Test (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+      - run: go test -race ./...
+
+  govulncheck:
+    name: Vulnerability scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ env.GO_VERSION_FILE }}
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - run: govulncheck ./...
+
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: api
+          push: false
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          target: worker
+          push: false

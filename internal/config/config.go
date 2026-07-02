@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
@@ -48,15 +49,15 @@ type Config struct {
 }
 
 func LoadConfig() *Config {
-	jwtSecret := getEnv("JWT_SECRET", "secret")
+	jwtSecret := getEnv("JWT_SECRET", "")
 	maxConnections := getEnvInt("DB_MAX_CONNECTIONS", 25)
 	return &Config{
 		Port:                      getEnv("PORT", "8080"),
 		Environment:               getEnv("ENVIRONMENT", "development"),
-		DatabaseURL:               getEnv("DATABASE_URL", "postgres://srie:qwerty@localhost:5432/vk_db"),
+		DatabaseURL:               getEnv("DATABASE_URL", ""),
 		MaxConnections:            maxConnections,
 		JWTSecret:                 jwtSecret,
-		OAuthStateSecret:          getEnv("OAUTH_STATE_SECRET", jwtSecret),
+		OAuthStateSecret:          getEnv("OAUTH_STATE_SECRET", ""),
 		OAuthStateTTLSeconds:      getEnvInt("OAUTH_STATE_TTL_SECONDS", 600),
 		WebSocketAllowedOrigins:   getEnvCSV("WEBSOCKET_ALLOWED_ORIGINS", ""),
 		RedisAddr:                 getEnv("REDIS_ADDR", "localhost:6379"),
@@ -89,6 +90,42 @@ func LoadConfig() *Config {
 		CustomLLMBaseURL:          getEnv("CUSTOM_LLM_BASE_URL", "http://localhost:11434/v1"), // Default to Ollama
 		CustomLLMModel:            getEnv("CUSTOM_LLM_MODEL", "llama3"),
 	}
+}
+
+// Validate fails fast on missing or insecure required configuration instead
+// of silently falling back to defaults that were historically exploitable
+// (JWT_SECRET="secret", a hardcoded DATABASE_URL, OAuthStateSecret reusing
+// JWTSecret).
+func (c *Config) Validate() error {
+	var missing []string
+	if c.DatabaseURL == "" {
+		missing = append(missing, "DATABASE_URL")
+	}
+	if c.JWTSecret == "" {
+		missing = append(missing, "JWT_SECRET")
+	}
+	if c.OAuthStateSecret == "" {
+		missing = append(missing, "OAUTH_STATE_SECRET")
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("missing required config: %s", strings.Join(missing, ", "))
+	}
+
+	if c.Environment == "production" {
+		weak := map[string]string{
+			"JWT_SECRET":         c.JWTSecret,
+			"OAUTH_STATE_SECRET": c.OAuthStateSecret,
+		}
+		for name, val := range weak {
+			if len(val) < 32 || strings.Contains(val, "change-in-production") || val == "secret" {
+				return fmt.Errorf("%s is missing or too weak for production (want a random value >= 32 chars)", name)
+			}
+		}
+		if c.OAuthStateSecret == c.JWTSecret {
+			return fmt.Errorf("OAUTH_STATE_SECRET must not equal JWT_SECRET")
+		}
+	}
+	return nil
 }
 
 func getEnv(key, def string) string {
