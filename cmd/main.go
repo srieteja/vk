@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -21,6 +22,7 @@ import (
 	"vk_backend/internal/models"
 	"vk_backend/internal/observability"
 	"vk_backend/internal/outbox"
+	"vk_backend/internal/payments"
 	"vk_backend/internal/services"
 	"vk_backend/internal/sessions"
 
@@ -162,12 +164,39 @@ func main() {
 		c.JSON(200, gin.H{"status": "ok", "service": "vk_backend"})
 	})
 
+	// Payment gateway: webhook endpoints for both providers always exist at
+	// fixed URLs (so a gateway dashboard's webhook config doesn't need to
+	// change if PAYMENT_PROVIDER is switched later); the "active" provider
+	// -- the one used to create new payment intents -- is selected by
+	// PAYMENT_PROVIDER. cfg.Validate() already rejects "fake" in production.
+	stripeProvider := payments.NewStripeProvider(cfg.StripeSecretKey, cfg.StripeWebhookSecret)
+	razorpayProvider := payments.NewRazorpayProvider(cfg.RazorpayKeyID, cfg.RazorpayKeySecret, cfg.RazorpayWebhookSecret)
+	stripeWebhookService := services.NewWebhookService(db, outboxService, stripeProvider)
+	razorpayWebhookService := services.NewWebhookService(db, outboxService, razorpayProvider)
+
+	var paymentProvider payments.Provider
+	var fakeWebhookService *services.WebhookService
+	switch cfg.PaymentProvider {
+	case "stripe":
+		paymentProvider = stripeProvider
+	case "razorpay":
+		paymentProvider = razorpayProvider
+	default:
+		log.Info("PAYMENT_PROVIDER=%s: using the fake in-memory payment provider (not for production)", cfg.PaymentProvider)
+		fakeProvider := payments.NewFakeProvider()
+		paymentProvider = fakeProvider
+		// Only registered when fake is active, since cfg.Validate() rejects
+		// it in production -- this route exists purely for local dev/testing
+		// without real gateway credentials.
+		fakeWebhookService = services.NewWebhookService(db, outboxService, fakeProvider)
+	}
+
 	// Initialize services
 	authService := services.NewAuthService(db, sessionStore)
 	oauthService := services.NewOAuthService(db, cfg, authService)
 	advocateService := services.NewAdvocateService(db)
 	callService := services.NewCallService(db, outboxService)
-	paymentService := services.NewPaymentService(db, cfg, outboxService)
+	paymentService := services.NewPaymentService(db, cfg, outboxService, paymentProvider)
 	webrtcService := services.NewWebRTCService(db, cfg.JWTSecret)
 	signalingService := services.NewSignalingService(webrtcService, cfg.WebSocketAllowedOrigins, redisClient)
 
@@ -204,6 +233,58 @@ func main() {
 		api.GET("/ws/signal", func(c *gin.Context) {
 			signalingService.HandleWebSocket(c.Writer, c.Request)
 		})
+
+		// Gateway webhooks: unauthenticated (the gateway isn't one of our
+		// users), verified instead by the provider's own signature scheme.
+		// Deliberately outside authMiddleware/IdempotencyMiddleware -- the
+		// raw body must reach ParseWebhook untouched for signature
+		// verification, and webhook_events provides its own idempotency.
+		webhooks := api.Group("/webhooks")
+		{
+			webhooks.POST("/stripe", func(c *gin.Context) {
+				body, err := io.ReadAll(c.Request.Body)
+				if err != nil {
+					c.JSON(400, gin.H{"error": "failed to read request body"})
+					return
+				}
+				if err := stripeWebhookService.HandleWebhook(c.Request.Context(), body, c.Request.Header); err != nil {
+					log.Info("Stripe webhook rejected: %v", err)
+					c.JSON(400, gin.H{"error": "webhook processing failed"})
+					return
+				}
+				c.JSON(200, gin.H{"status": "ok"})
+			})
+
+			webhooks.POST("/razorpay", func(c *gin.Context) {
+				body, err := io.ReadAll(c.Request.Body)
+				if err != nil {
+					c.JSON(400, gin.H{"error": "failed to read request body"})
+					return
+				}
+				if err := razorpayWebhookService.HandleWebhook(c.Request.Context(), body, c.Request.Header); err != nil {
+					log.Info("Razorpay webhook rejected: %v", err)
+					c.JSON(400, gin.H{"error": "webhook processing failed"})
+					return
+				}
+				c.JSON(200, gin.H{"status": "ok"})
+			})
+
+			if fakeWebhookService != nil {
+				webhooks.POST("/fake", func(c *gin.Context) {
+					body, err := io.ReadAll(c.Request.Body)
+					if err != nil {
+						c.JSON(400, gin.H{"error": "failed to read request body"})
+						return
+					}
+					if err := fakeWebhookService.HandleWebhook(c.Request.Context(), body, c.Request.Header); err != nil {
+						log.Info("Fake webhook rejected: %v", err)
+						c.JSON(400, gin.H{"error": "webhook processing failed"})
+						return
+					}
+					c.JSON(200, gin.H{"status": "ok"})
+				})
+			}
+		}
 
 		auth := api.Group("/auth")
 		{
@@ -495,6 +576,22 @@ func main() {
 				log.Info("Admin revoked all sessions for userID=%d", req.UserID)
 				c.JSON(200, gin.H{"status": "revoked"})
 			})
+
+			admin.POST("/payments/refund", func(c *gin.Context) {
+				var req struct {
+					TransactionID string `json:"transaction_id" binding:"required"`
+				}
+				if err := c.ShouldBindJSON(&req); err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+				if err := paymentService.RefundPayment(c.Request.Context(), req.TransactionID); err != nil {
+					c.JSON(400, gin.H{"error": err.Error()})
+					return
+				}
+				log.Info("Admin requested refund for transactionID=%s", req.TransactionID)
+				c.JSON(200, gin.H{"status": "refund requested"})
+			})
 		}
 
 		// ---------------------------
@@ -709,15 +806,15 @@ func main() {
 					}
 
 					var req struct {
-						AdvocateID uint    `json:"advocate_id" binding:"required"`
-						Amount     float64 `json:"amount" binding:"required"`
+						AdvocateID      uint `json:"advocate_id" binding:"required"`
+						DurationMinutes int  `json:"duration_minutes" binding:"required"`
 					}
 					if err := c.ShouldBindJSON(&req); err != nil {
 						c.JSON(400, gin.H{"error": err.Error()})
 						return
 					}
 
-					payment, err := paymentService.InitiatePayment(userID.(uint), req.AdvocateID, req.Amount)
+					payment, err := paymentService.InitiatePayment(c.Request.Context(), userID.(uint), req.AdvocateID, req.DurationMinutes)
 					if err != nil {
 						c.JSON(400, gin.H{"error": err.Error()})
 						return
@@ -726,7 +823,7 @@ func main() {
 					c.JSON(200, payment)
 				})
 
-				payment.POST("/verify", func(c *gin.Context) {
+				payment.GET("/:transaction_id/status", func(c *gin.Context) {
 					userID, _ := c.Get("user_id")
 					userType, _ := c.Get("user_type")
 
@@ -735,15 +832,7 @@ func main() {
 						return
 					}
 
-					var req struct {
-						TransactionID string `json:"transaction_id" binding:"required"`
-					}
-					if err := c.ShouldBindJSON(&req); err != nil {
-						c.JSON(400, gin.H{"error": err.Error()})
-						return
-					}
-
-					payment, err := paymentService.VerifyPayment(req.TransactionID, userID.(uint))
+					payment, err := paymentService.GetPaymentStatus(c.Param("transaction_id"), userID.(uint))
 					if err != nil {
 						c.JSON(400, gin.H{"error": err.Error()})
 						return

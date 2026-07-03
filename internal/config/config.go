@@ -40,6 +40,13 @@ type Config struct {
 	TokenExpiry               time.Duration
 	PlatformCommission        float64
 	UserBRatePerMinute        float64
+	PaymentProvider           string
+	PaymentCurrency           string
+	StripeSecretKey           string
+	StripeWebhookSecret       string
+	RazorpayKeyID             string
+	RazorpayKeySecret         string
+	RazorpayWebhookSecret     string
 	LogLevel                  string
 	GoogleClientID            string
 	GoogleClientSecret        string
@@ -85,6 +92,13 @@ func LoadConfig() *Config {
 		TokenExpiry:               time.Duration(getEnvInt("TOKEN_EXPIRY", 86400)) * time.Second,
 		PlatformCommission:        getEnvFloat("PLATFORM_COMMISSION_PERCENTAGE", 20.0),
 		UserBRatePerMinute:        getEnvFloat("USERB_RATE_PER_MINUTE", 5.0),
+		PaymentProvider:           getEnv("PAYMENT_PROVIDER", "fake"),
+		PaymentCurrency:           getEnv("PAYMENT_CURRENCY", "usd"),
+		StripeSecretKey:           getEnv("STRIPE_SECRET_KEY", ""),
+		StripeWebhookSecret:       getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		RazorpayKeyID:             getEnv("RAZORPAY_KEY_ID", ""),
+		RazorpayKeySecret:         getEnv("RAZORPAY_KEY_SECRET", ""),
+		RazorpayWebhookSecret:     getEnv("RAZORPAY_WEBHOOK_SECRET", ""),
 		LogLevel:                  getEnv("LOG_LEVEL", "INFO"),
 		GoogleClientID:            getEnv("GOOGLE_CLIENT_ID", ""),
 		GoogleClientSecret:        getEnv("GOOGLE_CLIENT_SECRET", ""),
@@ -132,6 +146,21 @@ func (c *Config) Validate() error {
 		}
 		if c.OAuthStateSecret == c.JWTSecret {
 			return fmt.Errorf("OAUTH_STATE_SECRET must not equal JWT_SECRET")
+		}
+
+		switch c.PaymentProvider {
+		case "fake":
+			return fmt.Errorf("PAYMENT_PROVIDER=fake must not run in production")
+		case "stripe":
+			if c.StripeSecretKey == "" || c.StripeWebhookSecret == "" {
+				return fmt.Errorf("STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET are required when PAYMENT_PROVIDER=stripe")
+			}
+		case "razorpay":
+			if c.RazorpayKeyID == "" || c.RazorpayKeySecret == "" || c.RazorpayWebhookSecret == "" {
+				return fmt.Errorf("RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, and RAZORPAY_WEBHOOK_SECRET are required when PAYMENT_PROVIDER=razorpay")
+			}
+		default:
+			return fmt.Errorf("unknown PAYMENT_PROVIDER %q (want stripe, razorpay, or fake)", c.PaymentProvider)
 		}
 	}
 	return nil

@@ -9,7 +9,7 @@ import (
 )
 
 func setupTestDB() *gorm.DB {
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{TranslateError: true})
 	if err != nil {
 		panic("failed to connect to database")
 	}
@@ -23,6 +23,7 @@ func setupTestDB() *gorm.DB {
 		&models.Session{},
 		&models.OutboxEvent{},
 		&models.IdempotencyKey{},
+		&models.WebhookEvent{},
 	)
 	if err != nil {
 		panic("failed to migrate schema")

@@ -62,17 +62,26 @@ func (Call) TableName() string {
 }
 
 type Payment struct {
-	ID                 uint      `gorm:"primaryKey" json:"id"`
-	ClientID           uint      `json:"client_id"`
-	AdvocateID         uint      `json:"advocate_id"`
-	Amount             float64   `json:"amount"`
-	Status             string    `json:"status"`
-	TransactionID      string    `gorm:"uniqueIndex" json:"transaction_id"`
-	PaymentGateway     string    `json:"payment_gateway"`
-	AdvocateCommission float64   `json:"advocate_commission"`
-	PlatformFee        float64   `json:"platform_fee"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                      uint      `gorm:"primaryKey" json:"id"`
+	ClientID                uint      `json:"client_id"`
+	AdvocateID              uint      `json:"advocate_id"`
+	AmountCents             int64     `json:"amount_cents"`
+	Currency                string    `json:"currency"`
+	DurationMinutes         int       `json:"duration_minutes"`
+	Status                  string    `json:"status"`
+	TransactionID           string    `gorm:"uniqueIndex" json:"transaction_id"`
+	PaymentGateway          string    `json:"payment_gateway"`
+	GatewayPaymentID        string    `json:"gateway_payment_id,omitempty"`
+	AdvocateCommissionCents int64     `json:"advocate_commission_cents"`
+	PlatformFeeCents        int64     `json:"platform_fee_cents"`
+	RefundedAmountCents     int64     `json:"refunded_amount_cents"`
+	CreatedAt               time.Time `json:"created_at"`
+	UpdatedAt               time.Time `json:"updated_at"`
+	// ClientSecret is set only on the InitiatePayment response for
+	// client-side gateway confirmation; never persisted (gateways don't
+	// need it stored -- Stripe keeps it retrievable via the PaymentIntent
+	// itself, and Razorpay doesn't use one at all).
+	ClientSecret string `gorm:"-" json:"client_secret,omitempty"`
 }
 
 func (Payment) TableName() string {
@@ -122,4 +131,20 @@ type IdempotencyKey struct {
 
 func (IdempotencyKey) TableName() string {
 	return "idempotency_keys"
+}
+
+// WebhookEvent records every gateway webhook delivery we've processed, keyed
+// by (provider, event_id), so a redelivered event is a no-op instead of
+// double-crediting or double-refunding a payment.
+type WebhookEvent struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	Provider  string    `gorm:"uniqueIndex:idx_webhook_provider_event" json:"provider"`
+	EventID   string    `gorm:"uniqueIndex:idx_webhook_provider_event" json:"event_id"`
+	EventType string    `json:"event_type"`
+	Payload   []byte    `gorm:"type:jsonb" json:"payload"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+func (WebhookEvent) TableName() string {
+	return "webhook_events"
 }

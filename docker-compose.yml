@@ -26,6 +26,17 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+  # Emulates the Stripe API for local/CI testing without a real Stripe
+  # account. Point STRIPE_SECRET_KEY at any sk_test_* value and configure
+  # the stripe-go client's base URL to http://localhost:12111 to use it
+  # (see https://github.com/stripe/stripe-mock). Not used by default --
+  # PAYMENT_PROVIDER=fake covers local dev without needing this container.
+  stripe-mock:
+    image: stripe/stripe-mock:latest
+    container_name: vk_stripe_mock
+    ports:
+      - "12111:12111"
+      - "12112:12112"
 
 volumes:
   postgres_data:
