@@ -5,7 +5,7 @@ go 1.26
 toolchain go1.26.4
 
 require (
-	github.com/anthropics/anthropic-sdk-go v1.55.1
+	github.com/anthropics/anthropic-sdk-go v1.56.0
 	github.com/gin-contrib/cors v1.7.7
 	github.com/gin-gonic/gin v1.12.0
 	github.com/google/uuid v1.6.0
